@@ -1,2 +1,2 @@
 # kiseru
-Data pipeline framework
+Data pipeline framework. (煙管 kiseru) is a Japanese "pipe".
