@@ -20,6 +20,13 @@ package org.apache.kiseru.pipeline;
 
 import org.apache.kiseru.dsl.ParseObject;
 
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.Id;
+import javax.persistence.Table;
+
+@Entity(name = "Activity")
+@Table(name = "ACTIVITY")
 public class DataNode implements ParseObject {
 
     private String id;
@@ -29,6 +36,7 @@ public class DataNode implements ParseObject {
     private String table;
     private String query;
 
+    @Id
     public String getId() {
         return id;
     }
@@ -37,6 +45,7 @@ public class DataNode implements ParseObject {
         this.id = id;
     }
 
+    @Column(name = "URI")
     public String getUri() {
         return uri;
     }
@@ -45,6 +54,7 @@ public class DataNode implements ParseObject {
         this.uri = uri;
     }
 
+    @Column(name = "USERNAME")
     public String getUserName() {
         return userName;
     }
@@ -53,6 +63,7 @@ public class DataNode implements ParseObject {
         this.userName = userName;
     }
 
+    @Column(name = "PASSWORD")
     public String getPassword() {
         return password;
     }
@@ -61,6 +72,7 @@ public class DataNode implements ParseObject {
         this.password = password;
     }
 
+    @Column(name = "TABLE")
     public String getTable() {
         return table;
     }
@@ -69,6 +81,7 @@ public class DataNode implements ParseObject {
         this.table = table;
     }
 
+    @Column(name = "QUERY")
     public String getQuery() {
         return query;
     }

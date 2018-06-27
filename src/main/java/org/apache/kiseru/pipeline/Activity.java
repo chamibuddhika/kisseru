@@ -18,14 +18,21 @@
  */
 package org.apache.kiseru.pipeline;
 
-import org.apache.kiseru.annotation.TaskParam;
 import org.apache.kiseru.dsl.ParseObject;
 
+import javax.persistence.*;
 import java.util.List;
 
+@Entity(name = "Activity")
+@Table(name = "ACTIVITY")
+@NamedQueries({
+        @NamedQuery(name="Activity.isActivityPresent",
+                query="SELECT count(ACTIVITY_ID) FROM Activity a where a.id = :id"),
+        @NamedQuery(name="Activity.getActivity",
+                query="SELECT a FROM Activity a WHERE a.id = :id"),
+})
 public class Activity implements ParseObject {
 
-    @TaskParam(name = "Task Id")
     private String id = "";
 
     private List<RunConfiguration> runConfigs;
@@ -34,6 +41,7 @@ public class Activity implements ParseObject {
 
     private List<OutPort> outputs;
 
+    @Id
     public String getId() {
         return id;
     }
@@ -42,6 +50,9 @@ public class Activity implements ParseObject {
         this.id = id;
     }
 
+    @OneToMany(mappedBy="activity",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true)
     public List<RunConfiguration> getRunConfigs() {
         return runConfigs;
     }
@@ -50,6 +61,9 @@ public class Activity implements ParseObject {
         this.runConfigs = runConfigs;
     }
 
+    @OneToMany(mappedBy="activity",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true)
     public List<InPort> getInputs() {
         return inputs;
     }
@@ -58,6 +72,9 @@ public class Activity implements ParseObject {
         this.inputs = inputs;
     }
 
+    @OneToMany(mappedBy="activity",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true)
     public List<OutPort> getOutputs() {
         return outputs;
     }
@@ -69,7 +86,7 @@ public class Activity implements ParseObject {
     /*
     public abstract void run(String id, int numPartitions, int partitionNum) throws Exception;
 
-    public abstract void onEntry();
+    public abstract void onEntry()gg;
 
     public abstract void onSuccess();
 

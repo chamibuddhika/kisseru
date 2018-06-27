@@ -20,6 +20,9 @@ package org.apache.kiseru.pipeline;
 
 import org.apache.kiseru.dsl.ParseObject;
 
+import javax.persistence.Column;
+import javax.persistence.Id;
+
 public class Schedule implements ParseObject {
 
     private String id;
@@ -30,6 +33,8 @@ public class Schedule implements ParseObject {
 
     }
 
+    @Id
+    @Column(name = "SCHEDULE_ID")
     public String getId() {
         return id;
     }
@@ -38,6 +43,7 @@ public class Schedule implements ParseObject {
         this.id = id;
     }
 
+    @Column(name = "CRON")
     public String getCron() {
         return cron;
     }

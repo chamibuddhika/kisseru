@@ -20,12 +20,13 @@ package org.apache.kiseru.pipeline;
 
 import org.apache.kiseru.dsl.ParseObject;
 
+import javax.persistence.*;
 import java.util.List;
 
 public class Pipeline implements ParseObject {
 
     private String id;
-    private String scheduleId;
+    private Schedule schedule;
     private List<Component> components;
 
     @Override
@@ -33,22 +34,29 @@ public class Pipeline implements ParseObject {
 
     }
 
+    @Id
     public String getId() {
         return id;
     }
+
 
     public void setId(String id) {
         this.id = id;
     }
 
-    public String getScheduleId() {
-        return scheduleId;
+    @ManyToOne
+    @JoinColumn(name = "SCHEDULE_ID", referencedColumnName = "SCHEDULE_ID")
+    public Schedule getSchedule() {
+        return schedule;
     }
 
-    public void setScheduleId(String scheduleId) {
-        this.scheduleId = scheduleId;
+    public void setSchedule(Schedule schedule) {
+        this.schedule = schedule;
     }
 
+    @OneToMany(mappedBy="pipeline",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true)
     public List<Component> getComponents() {
         return components;
     }

@@ -104,7 +104,7 @@ public class Parser {
                 InPort in = new InPort();
                 in.setId(getNodeValue(id));
                 in.setType(parseType(getNodeValue(type)));
-                in.setSchema(parseSchema(getNodeValue(schema)));
+                // in.setSchema(parseSchema(getNodeValue(schema)));
 
                 in.validate();
 
@@ -130,7 +130,7 @@ public class Parser {
                 OutPort out = new OutPort();
                 out.setId(getNodeValue(id));
                 out.setType(parseType(getNodeValue(type)));
-                out.setSchema(parseSchema(getNodeValue(schema)));
+                // out.setSchema(parseSchema(getNodeValue(schema)));
 
                 out.validate();
 
@@ -341,7 +341,7 @@ public class Parser {
                 JsonNode outputs   = component.path(Constants.OUTPUTS);
 
                 Component c = new Component();
-                c.setActivityId(getNodeValue(activity));
+                c.setId(getNodeValue(activity));
                 c.setRunConfigId(getNodeValue(runConfig));
                 c.setInputs(parseInputs(inputs));
                 c.setOutputs(parseOutputs(outputs));
@@ -363,7 +363,7 @@ public class Parser {
 
             Pipeline p = new Pipeline();
             p.setId(getNodeValue(id));
-            p.setScheduleId(getNodeValue(schedule));
+            // p.setScheduleId(getNodeValue(schedule));
             p.setComponents(parseComponents(nodes));
 
             return p;

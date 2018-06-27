@@ -20,19 +20,25 @@ package org.apache.kiseru.pipeline;
 
 import org.apache.kiseru.dsl.ParseObject;
 
+import javax.persistence.Column;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
+import javax.persistence.Id;
 import java.util.Map;
 
 public class OutPort implements ParseObject {
 
     private String id;
     private Type type;
-    private Map<String, SchemaType> schema;
+
+    // private Map<String, SchemaType> schema;
 
     @Override
     public void validate() {
 
     }
 
+    @Id
     public String getId() {
         return id;
     }
@@ -41,6 +47,8 @@ public class OutPort implements ParseObject {
         this.id = id;
     }
 
+    @Column(name = "TYPE")
+    @Enumerated(EnumType.STRING)
     public Type getType() {
         return type;
     }
@@ -49,6 +57,7 @@ public class OutPort implements ParseObject {
         this.type = type;
     }
 
+    /*
     public Map<String, SchemaType> getSchema() {
         return schema;
     }
@@ -56,4 +65,5 @@ public class OutPort implements ParseObject {
     public void setSchema(Map<String, SchemaType> schema) {
         this.schema = schema;
     }
+    */
 }

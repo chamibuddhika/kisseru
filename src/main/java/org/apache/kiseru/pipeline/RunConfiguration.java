@@ -20,12 +20,18 @@ package org.apache.kiseru.pipeline;
 
 import org.apache.kiseru.dsl.ParseObject;
 
+import javax.persistence.*;
+import java.util.Objects;
+
 public class RunConfiguration implements ParseObject {
 
     private String id;
     private String executable;
     private String resourceId;
+    private Activity activity;
 
+    @Id
+    @GeneratedValue
     public String getId() {
         return id;
     }
@@ -34,6 +40,7 @@ public class RunConfiguration implements ParseObject {
         this.id = id;
     }
 
+    @Column(name = "EXECUTABLE")
     public String getExecutable() {
         return executable;
     }
@@ -42,6 +49,7 @@ public class RunConfiguration implements ParseObject {
         this.executable = executable;
     }
 
+    @Column(name = "RESOURCE_ID")
     public String getResourceId() {
         return resourceId;
     }
@@ -50,8 +58,32 @@ public class RunConfiguration implements ParseObject {
         this.resourceId = resourceId;
     }
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ACTIVITY_ID")
+    public Activity getActivity() {
+        return activity;
+    }
+
+    public void setActivity(Activity activity) {
+        this.activity = activity;
+    }
+
     @Override
     public void validate() {
 
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        RunConfiguration that = (RunConfiguration) o;
+        return Objects.equals(getId(), that.getId());
+    }
+
+    @Override
+    public int hashCode() {
+
+        return Objects.hash(getId());
     }
 }

@@ -20,21 +20,24 @@ package org.apache.kiseru.pipeline;
 
 import org.apache.kiseru.dsl.ParseObject;
 
+import javax.persistence.Id;
 import java.util.List;
 
 public class Component implements ParseObject {
 
-    private String activityId;
+    private String id;
     private String runConfigId;
     private List<Input> inputs;
     private List<Output> outputs;
+    private Pipeline pipeline;
 
-    public String getActivityId() {
-        return activityId;
+    @Id
+    public String getId() {
+        return id;
     }
 
-    public void setActivityId(String activityId) {
-        this.activityId = activityId;
+    public void setId(String id) {
+        this.id = id;
     }
 
     public String getRunConfigId() {
