@@ -1,6 +1,7 @@
 
 from enum import Enum
 from utils import parmap
+from utils import parmap_dict
 
 try:
    import cPickle as pickle
@@ -43,7 +44,7 @@ class Backend(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def flush(self, ir):
-        """ Prepares and writes out the deployment artifact.
+        """ Prepares and writes out the deployment artifact. 
 
         Args:
             ir: IR representation corresponding to the pipeline
@@ -196,21 +197,22 @@ class Operator(metaclass=abc.ABCMeta):
         self.is_iterative = False
         self.until  = None
 
-    def _delegate(self, other):
+    def _delegate(self, other, func):
+
         if type(self) != Pipeline:
             # Bit of a hack by breaking the abstraction down the inheritance
             # hierarchy. But makes pipeline definition simpler by making it
             # possible to construct a new pipeline without explicitly instantiating
             # Pipeline object at the beginning
-            return Pipeline().__or__(self).__or__(other) 
+            return getattr(getattr(Pipeline(), func)(self), func)(other) 
         else:
-            return self.__or__(other)
+            return getattr(self, func)(other)
 
     def __or__(self, other):
-        return self._delegate(other)
+        return self._delegate(other, "__or__")
 
     def __floordiv__(self, other):
-        return self._delegate(other)
+        return self._delegate(other, "__floordiv__")
 
     @abc.abstractmethod
     def run(self, inputs):
@@ -240,10 +242,10 @@ class ParallelOp(Operator):
         # If the parallelism is not given, it is set to the number of processors by 
         # parmap_dict
         res = inputs
-        if parallelism == -1:
+        if self.parallelism == -1:
             parmap_dict(self.operator.run, res, "__data__")
         else:
-            parmap_dict(self.operator.run, res, "__data__", parallelism)
+            parmap_dict(self.operator.run, res, "__data__", self.parallelism)
 
 class IterativeOp(Operator):
 
@@ -293,8 +295,12 @@ class Pipeline(Operator):
 
         if isinstance(operator, Pipeline):
             operator.is_pipeline = True
+
         self.operators.append(operator)
-        self.classes.add(operator.__class__.__name__)
+        if operator.__class__.__name__ != "Pipeline": 
+            self.classes.add(operator.__class__.__name__)
+        else:
+            self.classes = self.classes.union(operator.classes)
         return self
 
     def do_par(self, operator, parallelism = -1):
@@ -353,9 +359,12 @@ class Pipeline(Operator):
 
 class FooOperator(Operator):
 
+    def __init__(self):
+        self.input = [2, 3, 5]
+
     def run(self, obj):
         print("Running Foo")
-        return obj
+        return self.input
 
 class BarOperator(Operator):
 
@@ -364,7 +373,7 @@ class BarOperator(Operator):
         return obj
 
 if __name__ == "__main__":
-    p = FooOperator() | BarOperator() // BarOperator()
+    p = FooOperator() | (BarOperator() // BarOperator())
 
     p.run()
     p.submit()
