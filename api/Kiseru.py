@@ -352,9 +352,9 @@ class Pipeline(Operator):
         elif isinstance(operator, IterativeOp):
             for it in operator.iters:
                 classes.union(self._get_classes(it))
-            classes.union(operator.until.__class__.__name__)
+            classes.add(operator.until.__class__.__name__)
         else:
-            classes.union(operator.__class__.__name__)
+            classes.add(operator.__class__.__name__)
         return classes
 
 class FooOperator(Operator):
