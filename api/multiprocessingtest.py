@@ -2,14 +2,17 @@
 from contextlib import closing
 
 import utils
+import threading
 
 class Foo(object):
 
   def __init__(self):
     self.val = 42
 
-  def run(self, x):
-    return self.val + x
+  def run(self, x, partition):
+    print("Running run at thread %s" % threading.current_thread())
+    x.append(self.val)
+    return x
 
 def run(x):
   return x + 42

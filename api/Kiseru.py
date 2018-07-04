@@ -3,6 +3,11 @@ from enum import Enum
 from utils import parmap
 from utils import parmap_dict
 
+
+import numpy as np
+
+import threading
+
 try:
    import cPickle as pickle
 except:
@@ -147,6 +152,8 @@ class SMPBackend(Backend):
 
         # API imports
         self._add("from Kiseru import Operator")
+        self._add("from Kiseru import ParallelOp")
+        self._add("from Kiseru import IterativeOp")
         self._add("from Kiseru import Pipeline")
         self._add("from Kiseru import Conditional")
         self._addln("from Kiseru import RunnerType")
@@ -204,7 +211,7 @@ class Operator(metaclass=abc.ABCMeta):
             # hierarchy. But makes pipeline definition simpler by making it
             # possible to construct a new pipeline without explicitly instantiating
             # Pipeline object at the beginning
-            return getattr(getattr(Pipeline(), func)(self), func)(other) 
+            return getattr(getattr(Pipeline(), "__or__")(self), func)(other) 
         else:
             return getattr(self, func)(other)
 
@@ -215,7 +222,7 @@ class Operator(metaclass=abc.ABCMeta):
         return self._dispatch(other, "__floordiv__")
 
     @abc.abstractmethod
-    def run(self, inputs):
+    def run(self, inputs, partition = 0):
         return
 
     def _run_wrapper(self, inputs):
@@ -287,7 +294,7 @@ class Pipeline(Operator):
         return self.do(other) 
 
     def __floordiv__(self, other):
-        return self.do_par(self,other)
+        return self.do_par(other)
 
     def do(self, operator):
         if not isinstance(operator, Operator):
@@ -327,7 +334,7 @@ class Pipeline(Operator):
         self.operators.append(IterativeOp(iters, until))
         return self
 
-    def run(self, inputs = None):
+    def run(self, inputs = None, partition = 0):
         res = inputs
         for operator in self.operators:
             res = operator.run(res)
@@ -360,22 +367,32 @@ class Pipeline(Operator):
 class FooOperator(Operator):
 
     def __init__(self):
-        self.input = [2, 3, 5]
+        self.input = {"__data__" : np.array([2, 3, 5])}
 
-    def run(self, obj):
-        print("Running Foo")
+    def run(self, obj, partition = 0):
+        print("Running Foo at thread %s" % threading.current_thread())
         return self.input
 
 class BarOperator(Operator):
 
-    def run(self, obj):
-        print("Running Bar")
+    def run(self, obj, partition = 0):
+        print("Running Bar at thread %s" % threading.current_thread())
+        print(obj)
+        obj["__data__"][0] = 0
+        print(obj)
         return obj
 
 if __name__ == "__main__":
-    p = FooOperator() | BarOperator() 
+    foo = FooOperator()
+    data = foo.input
+
+    print(data)
+
+    p = foo // BarOperator() 
 
     p.run()
+
+    print(data)
     p.submit()
 
 

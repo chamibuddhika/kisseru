@@ -36,6 +36,9 @@ def parmap_dict(fn, data, par_key, nprocs=multiprocessing.cpu_count()):
       length = data[par_key].shape[0] 
     else:
       length = len(data[par_key])
+
+    nprocs = nprocs if nprocs < length else length - 1
+    print("Parallelism %d" % (nprocs + 1))
     partitions = _chunk(length, nprocs)
 
     proc = [multiprocessing.Process(
@@ -60,14 +63,14 @@ def _run(q_in, q_out, fn, partition, data,
 	 par_key = None):
   while True:
     partition, indices = q_in.get() # Partitioned data
-    if i is None:
+    if partition is None:
       break
-    q_out.put((i, fn(split_partition(data, par_key, partition, indices), partition)))
+    q_out.put((partition, fn(split_partition(data, partition, indices, par_key), partition)))
 
 def _chunk(length, n):
   chunks = []
   idx    = 0
-  chunk_size = length / n
+  chunk_size = int(length / n)
 
   while idx < length:
     if idx + chunk_size <= length:
@@ -77,7 +80,7 @@ def _chunk(length, n):
     idx += chunk_size
   return chunks
 
-def _array_split(data, partition, indices):
+def _array_split(data, partition, indices, par_key):
   if isinstance(data, pd.DataFrame):
     # This should return a view of the DataFrame instead of a copy 
     return data.iloc[indices[0]:indices[1]]
@@ -86,10 +89,12 @@ def _array_split(data, partition, indices):
     return data[indices[0]:indices[1]]
 
 def _dict_split(data, partition, indices, par_key):
-  if isinstance(data[par_key], pd.DataFrame):
+  # Makes a shallow copy
+  copy = data.copy()
+  if isinstance(copy[par_key], pd.DataFrame):
     # This should return a view of the DataFrame instead of a copy 
-    data[par_key + '_{0}'.format(partition)] = data[par_key].iloc[indices[0]:indices[1]]
+    copy[par_key] = data[par_key].iloc[indices[0]:indices[1]]
   else:
     # This only returns a view if the array is a numpy array not a python list
-    data[par_key + '_{0}'.format(partition)] = data[par_key][indices[0]:indices[1]]
-  return data
+    copy[par_key] = data[par_key][indices[0]:indices[1]]
+  return copy
