@@ -57,7 +57,7 @@ def parmap_dict(fn, data, par_key, nprocs=multiprocessing.cpu_count()):
 
 def _run(q_in, q_out, fn, partition, data,
          split_partition = lambda data, partition, indices, par_key = None : data,
-	 par_key)
+	 par_key = None):
   while True:
     partition, indices = q_in.get() # Partitioned data
     if i is None:
