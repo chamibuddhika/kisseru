@@ -197,7 +197,7 @@ class Operator(metaclass=abc.ABCMeta):
         self.is_iterative = False
         self.until  = None
 
-    def _delegate(self, other, func):
+    def _dispatch(self, other, func):
 
         if type(self) != Pipeline:
             # Bit of a hack by breaking the abstraction down the inheritance
@@ -209,10 +209,10 @@ class Operator(metaclass=abc.ABCMeta):
             return getattr(self, func)(other)
 
     def __or__(self, other):
-        return self._delegate(other, "__or__")
+        return self._dispatch(other, "__or__")
 
     def __floordiv__(self, other):
-        return self._delegate(other, "__floordiv__")
+        return self._dispatch(other, "__floordiv__")
 
     @abc.abstractmethod
     def run(self, inputs):
