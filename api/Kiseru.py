@@ -195,7 +195,23 @@ class Operator(metaclass=abc.ABCMeta):
         self.is_parallel  = False
         self.is_iterative = False
         self.until  = None
-        
+
+    def _delegate(self, other):
+        if type(self) != Pipeline:
+            # Bit of a hack by breaking the abstraction down the inheritance
+            # hierarchy. But makes pipeline definition simpler by making it
+            # possible to construct a new pipeline without explicitly instantiating
+            # Pipeline object at the beginning
+            return Pipeline().__or__(self).__or__(other) 
+        else:
+            return self.__or__(other)
+
+    def __or__(self, other):
+        return self._delegate(other)
+
+    def __floordiv__(self, other):
+        return self._delegate(other)
+
     @abc.abstractmethod
     def run(self, inputs):
         return
@@ -205,7 +221,6 @@ class Operator(metaclass=abc.ABCMeta):
 
     def codegen(self, backend):
         backend.gen(self)
-
 
 class FusedOperator(Operator):
     
@@ -265,7 +280,13 @@ class Pipeline(Operator):
         self.runner    = None
         self.classes   = set() 
         self.is_nested = False
-  
+
+    def __or__(self, other):
+        return self.do(other) 
+
+    def __floordiv__(self, other):
+        return self.do_par(self,other)
+
     def do(self, operator):
         if not isinstance(operator, Operator):
             raise Exception("Invalid operator")
@@ -343,9 +364,8 @@ class BarOperator(Operator):
         return obj
 
 if __name__ == "__main__":
-    p = Pipeline()
-    p.do(FooOperator()) \
-     .do(BarOperator())
+    p = FooOperator() | BarOperator() // BarOperator()
+
     p.run()
     p.submit()
 
