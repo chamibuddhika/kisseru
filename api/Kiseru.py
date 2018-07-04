@@ -373,7 +373,7 @@ class BarOperator(Operator):
         return obj
 
 if __name__ == "__main__":
-    p = FooOperator() | (BarOperator() // BarOperator())
+    p = FooOperator() | BarOperator() 
 
     p.run()
     p.submit()
