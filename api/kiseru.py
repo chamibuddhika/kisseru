@@ -4,8 +4,8 @@ from enum import Enum
 import numpy as np
 import threading
 
-from utils import parmap
-from utils import parmap_dict
+from parops import parmap
+from parops import parmap_dict
 from decorators import MetaClassManager
 
 try:
