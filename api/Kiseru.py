@@ -1,12 +1,13 @@
 
 from enum import Enum
-from utils import parmap
-from utils import parmap_dict
-
 
 import numpy as np
-
 import threading
+import os
+
+from utils import parmap
+from utils import parmap_dict
+from decorators import MetaClassManager
 
 try:
    import cPickle as pickle
@@ -196,7 +197,7 @@ class SMPBackend(Backend):
         indent = " " * nspaces 
         return indent + line
 
-class Operator(metaclass=abc.ABCMeta):
+class Operator(metaclass=MetaClassManager):
   
     def __init__(self):
         self.is_pipeline  = False
@@ -296,6 +297,9 @@ class Pipeline(Operator):
     def __floordiv__(self, other):
         return self.do_par(other)
 
+    def __contains__(self, other):
+        return self.do_par()
+
     def do(self, operator):
         if not isinstance(operator, Operator):
             raise Exception("Invalid operator")
@@ -376,7 +380,7 @@ class FooOperator(Operator):
 class BarOperator(Operator):
 
     def run(self, obj, partition = 0):
-        print("Running Bar at thread %s" % threading.current_thread())
+        print("Running Bar at process %s with parent process %s" % (os.getpid(), os.getppid()))
         print(obj)
         obj["__data__"][0] = 0
         print(obj)
@@ -388,7 +392,8 @@ if __name__ == "__main__":
 
     print(data)
 
-    p = foo // BarOperator() 
+    # p = foo // using(['parllelism=2, fdf=34']) in BarOperator()  
+    p = foo | BarOperator()
 
     p.run()
 
