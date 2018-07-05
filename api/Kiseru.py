@@ -3,7 +3,6 @@ from enum import Enum
 
 import numpy as np
 import threading
-import os
 
 from utils import parmap
 from utils import parmap_dict
@@ -380,8 +379,6 @@ class FooOperator(Operator):
 class BarOperator(Operator):
 
     def run(self, obj, partition = 0):
-        print("Running Bar at process %s with parent process %s" % (os.getpid(), os.getppid()))
-        print(obj)
         obj["__data__"][0] = 0
         print(obj)
         return obj
