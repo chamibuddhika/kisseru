@@ -2,7 +2,6 @@
 import abc
 import time
 import types
-import functools
 
 class MetaClassDecorator(metaclass=abc.ABCMeta):
 

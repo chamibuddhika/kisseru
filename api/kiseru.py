@@ -30,7 +30,17 @@ class Backend(metaclass=abc.ABCMeta):
     def __init__(self):
         self.code = []
         self.descriptor = {}
-        self.passes = [self.gen, self.gen_descriptor, self.flush]
+        self.passes = [self._validate, self._flatten, self.gen, self.gen_descriptor, self.flush]
+
+    # Validates the pipeline
+    def _validate(self, ir):
+        # Check if the pipeline starts with a Source
+        # Check if there are no Source operators in the middle of pipeline
+        # Check if all the operators are actually Operators
+
+    # Flattens the pipeline definition removing unnecessary nested pipelines. 
+    def _flatten(self, ir):
+        return ir
 
     @abc.abstractmethod
     def gen(self, ir): 
@@ -114,7 +124,7 @@ class SMPBackend(Backend):
 
     def gen(self, ir):
         if isinstance(ir, Pipeline):
-            if not ir.is_nested:
+            if ir.is_top_level:
                 print("Running codegen")
                 # pickle the pipeline
                 self._gen_runnable(ir)
@@ -206,11 +216,31 @@ class Operator(metaclass=MetaClassManager):
 
     def _dispatch(self, other, func):
 
-        if type(self) != Pipeline:
-            # Bit of a hack by breaking the abstraction down the inheritance
-            # hierarchy. But makes pipeline definition simpler by making it
-            # possible to construct a new pipeline without explicitly instantiating
-            # Pipeline object at the beginning
+        # This is a top level pipeline starting with the preamble 'start>'
+        if isinstance(self, Preamble):
+            # makes sure the preamble ends with '>'
+            if func != "__gt__":
+                raise Exception("Invalid preamble")
+            
+            # discards the preamble and returns the actual pipeline
+            if not isinstance(other, Pipeline):
+                p = Pipeline()
+                p.is_top_level = True
+                return getattr(p, "__or__")(other)
+            else:
+                other.is_top_level = True 
+                return other
+
+        # If an operator is in the head position of a pipeline (either due to a 
+        # separate pipeline definition or implicitly due to the operator 
+        # precedence grouping) makes sure that we generate a nested pipeline 
+        # with the operator at the head position
+        if not isinstance(self, Pipeline):
+            # This isinstance check is a bit of a hack by breaking the 
+            # abstraction down the inheritance hierarchy. But it makes pipeline 
+            # definition simpler by making it possible to construct a new
+            # pipeline without explicitly instantiating Pipeline object at the 
+            # beginning
             return getattr(getattr(Pipeline(), "__or__")(self), func)(other) 
         else:
             return getattr(self, func)(other)
@@ -220,6 +250,9 @@ class Operator(metaclass=MetaClassManager):
 
     def __floordiv__(self, other):
         return self._dispatch(other, "__floordiv__")
+
+    def __gt__(self, other):
+        return self._dispatch(other, "__gt__")
 
     @abc.abstractmethod
     def run(self, inputs, partition = 0):
@@ -236,6 +269,20 @@ class FusedOperator(Operator):
     def __init__(self, operators):
         Operator.__init__(self)
         self.operators = operators
+
+class Source(metaclass=MetaClassManager):
+
+    def __init__(self):
+        pass
+
+    @abc.abstractmethod
+    def run(self):
+        pass
+
+class Preamble(Source):
+
+    def run(self):
+        return None
 
 class ParallelOp(Operator):
 
@@ -264,8 +311,8 @@ class IterativeOp(Operator):
 
         for it in iters:
             if isinstance(it, Pipeline):
-                operator.is_pipeline = True
-                operator.is_nested   = True
+                operator.is_pipeline  = True
+                operator.is_top_level = False 
 
     def run(self, inputs = None):
         res = inputs
@@ -288,7 +335,8 @@ class Pipeline(Operator):
         self.operators = []
         self.runner    = None
         self.classes   = set() 
-        self.is_nested = False
+        self.is_pipeline = True
+        self.is_top_level = False
 
     def __or__(self, other):
         return self.do(other) 
@@ -299,26 +347,20 @@ class Pipeline(Operator):
     def __contains__(self, other):
         return self.do_par()
 
+    def _add_operator(self, operator):
+        self.operators.append(operator)
+        self.classes.union(self._get_classes(operator))
+
     def do(self, operator):
-        if not isinstance(operator, Operator):
+        if not isinstance(operator, Operator) :
             raise Exception("Invalid operator")
 
-        if isinstance(operator, Pipeline):
-            operator.is_pipeline = True
-
-        self.operators.append(operator)
-        if operator.__class__.__name__ != "Pipeline": 
-            self.classes.add(operator.__class__.__name__)
-        else:
-            self.classes = self.classes.union(operator.classes)
+        self._add_operator(operator)
         return self
 
     def do_par(self, operator, parallelism = -1):
-        if isinstance(operator, Pipeline):
-            operator.is_pipeline = True
-        operator.is_nested   = True
-        self.operators.append(ParallelOp(operator, parallelism))
-        self.classes.add(operator.__class__.__name__)
+        op = ParallelOp(operator, parallelism)
+        self._add_operator(operator)
         return self
 
     def do_iter(self, iters, until):
@@ -333,14 +375,19 @@ class Pipeline(Operator):
         # Check if we got a valid conditional
         if not isinstance(until, Conditional):
             raise Exception("Invalid conditional provided")
-
-        self.operators.append(IterativeOp(iters, until))
+        op = IterativeOp(iters, until)
+        self._add_operator(operator)
         return self
 
     def run(self, inputs = None, partition = 0):
-        res = inputs
-        for operator in self.operators:
-            res = operator.run(res)
+        if not self.is_top_level:
+            res = inputs
+            for operator in self.operators:
+                res = operator.run(res)
+        else:
+            res = self.operators[0].run()
+            for i in range(1, len(self.operators)):
+                res = self.operators[i].run(res)
 
     def submit(self):
         # default to LOCAL runner
@@ -389,7 +436,9 @@ if __name__ == "__main__":
 
     print(data)
 
-    # p = foo // using(['parllelism=2, fdf=34']) in BarOperator()  
+    # p = foo // {'parllelism'=2, 'fdf'=34} in BarOperator() \
+    # p = startwith & {} in (bar, baz)  
+
     p = foo | BarOperator()
 
     p.run()
