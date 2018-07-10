@@ -4,6 +4,7 @@ from enum import Enum
 import numpy as np
 import threading
 
+from itertools import islice
 from parops import parmap
 from parops import parmap_dict
 from decorators import MetaClassManager
@@ -30,13 +31,42 @@ class Backend(metaclass=abc.ABCMeta):
     def __init__(self):
         self.code = []
         self.descriptor = {}
-        self.passes = [self._validate, self._flatten, self.gen, self.gen_descriptor, self.flush]
+        self.passes = [self._validate, self._flatten, self.gen,
+                       self.gen_descriptor, self.flush]
+
+    def _validate_tail(self, operators):
+        for op in operators:
+            if not isinstance(op, Operator):
+                if isinstance(op, Source):
+                    raise Exception("The pipeline contains a Source in the middle of it")
+                raise Exception("The pipeline contains a non operator")
+
+            if isinstance(op, Pipeline):
+                self._validate_tail(op.operators)
+            elif isinstance(op, ParallelOp):
+                self._validate_tail(op.operator)
+            elif isinstance(op, IterativeOp):
+                for it in op.iters:
+                    self._validate_tail(it)
+
+    def _validate_head(self, operators):
+        if len(operators) == 0:
+            raise Exception("Empty pipeline")
+
+        if not isinstance(operators[0], Source):
+            raise Exception("The pipeline does not start with a Source")
 
     # Validates the pipeline
     def _validate(self, ir):
-        # Check if the pipeline starts with a Source
-        # Check if there are no Source operators in the middle of pipeline
-        # Check if all the operators are actually Operators
+        if not isinstance(ir, Pipeline):
+            raise Exception("Not a pipeline")
+
+        # Checks if the pipeline starts with a Source
+        self._validate_head(ir.operators)
+
+        # Validates the rest of the pipeline 
+        self._validate_tail(islice(operators, 1, None))
+        return ir
 
     # Flattens the pipeline definition removing unnecessary nested pipelines. 
     def _flatten(self, ir):
@@ -123,31 +153,25 @@ class SMPBackend(Backend):
         return ir
 
     def gen(self, ir):
-        if isinstance(ir, Pipeline):
-            if ir.is_top_level:
-                print("Running codegen")
-                # pickle the pipeline
-                self._gen_runnable(ir)
+        print("Running codegen")
+        # pickle the pipeline
+        self._gen_runnable(ir)
 
-                # now to generate the code to run the pickled pipeline
-                # ...
+        # now to generate the code to run the pickled pipeline
+        # ...
 
-                # print import headers using obj.classes
-                self._gen_imports(ir.classes)
+        # print import headers using obj.classes
+        self._gen_imports(ir.classes)
         
-                # generate main function header 
-                self._gen_main_header()
+        # generate main function header 
+        self._gen_main_header()
 
-                # unpickle and run the pipeline 
-                self._gen_main_body()
-            else:
-                raise Exception("Invalid Pipeline definition")
-        else:
-            raise Exception("Invalid Pipeline definition >")
+        # unpickle and run the pipeline 
+        self._gen_main_body()
         return ir
 
     def _gen_imports(self, classes):
-        # system imports
+        # System imports
         self._add("try:")
         self._indent_plus()
         self._add("import cPickle as pickle")
@@ -168,6 +192,7 @@ class SMPBackend(Backend):
         self._add("from Kiseru import Conditional")
         self._addln("from Kiseru import RunnerType")
 
+        # Import the operators used in the pipeline
         for cls in classes:
             self._add("from Kiseru import {0}".format(cls))
 
@@ -215,22 +240,6 @@ class Operator(metaclass=MetaClassManager):
         self.until  = None
 
     def _dispatch(self, other, func):
-
-        # This is a top level pipeline starting with the preamble 'start>'
-        if isinstance(self, Preamble):
-            # makes sure the preamble ends with '>'
-            if func != "__gt__":
-                raise Exception("Invalid preamble")
-            
-            # discards the preamble and returns the actual pipeline
-            if not isinstance(other, Pipeline):
-                p = Pipeline()
-                p.is_top_level = True
-                return getattr(p, "__or__")(other)
-            else:
-                other.is_top_level = True 
-                return other
-
         # If an operator is in the head position of a pipeline (either due to a 
         # separate pipeline definition or implicitly due to the operator 
         # precedence grouping) makes sure that we generate a nested pipeline 
@@ -281,8 +290,11 @@ class Source(metaclass=MetaClassManager):
 
 class Preamble(Source):
 
-    def run(self):
-        return None
+    def __gt__(self, other):
+        # Skips the preamble and returns a new pipeline
+        p = Pipeline()
+        p.is_top_level = True
+        return getattr(p, "__or__")(other)
 
 class ParallelOp(Operator):
 
@@ -338,6 +350,9 @@ class Pipeline(Operator):
         self.is_pipeline = True
         self.is_top_level = False
 
+        # Private member fields
+        self._is_anonymous = False
+
     def __or__(self, other):
         return self.do(other) 
 
@@ -385,9 +400,15 @@ class Pipeline(Operator):
             for operator in self.operators:
                 res = operator.run(res)
         else:
-            res = self.operators[0].run()
+            # Runs the preamble 
+            self.operators[0].run() 
+
+            # Then runs the rest of the pipeline which should start with a Source
             for i in range(1, len(self.operators)):
-                res = self.operators[i].run(res)
+                if isinstance(operator, Source):
+                    res = self.operators[i].run() 
+                else:
+                    res = self.operators[i].run(res)
 
     def submit(self):
         # default to LOCAL runner
