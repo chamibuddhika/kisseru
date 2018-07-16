@@ -1,508 +1,247 @@
+import uuid
+import ast
+import inspect
+import re
+import functools
 
 from enum import Enum
 
-import numpy as np
-import threading
+from inspect import Signature
+from inspect import signature
+from functools import wraps
 
-from itertools import islice
-from parops import parmap
-from parops import parmap_dict
-from decorators import MetaClassManager
+_CSV = 'CSV'
 
-try:
-   import cPickle as pickle
-except:
-   import pickle
 
-import abc
- 
-class RunnerType(Enum):
-    SMP     = 1
-    CLUSTER = 2
-    SPARK   = 3
+class Types(Enum):
+    _CSV = 1
+    ESRI = 2
+    GRB = 3
+    NETCDF4 = 4
 
-class Runner(metaclass=abc.ABCMeta):
 
-    def __init__(self, runner_type = RunnerType.SMP):
-        self.type = runner_type
- 
-class Backend(metaclass=abc.ABCMeta):
+class Stage(object):
+    def __init__(self, task, args, kwargs):
+        self.task = task
+        self.args = args
+        self.kwargs = kwargs
+        self.uuid = uuid.uuid1()
 
-    def __init__(self):
-        self.code = []
-        self.descriptor = {}
-        self.passes = [self._validate, self._flatten, self.gen,
-                       self.gen_descriptor, self.flush]
 
-    def _validate_tail(self, operators):
-        for op in operators:
-            if not isinstance(op, Operator):
-                if isinstance(op, Source):
-                    raise Exception("The pipeline contains a Source in the middle of it")
-                raise Exception("The pipeline contains a non operator")
+class Script(object):
+    def __init__(self, lines, linenos):
+        self.lines = lines
+        self.linenos = linenos
 
-            if isinstance(op, Pipeline):
-                self._validate_tail(op.operators)
-            elif isinstance(op, ParallelOp):
-                self._validate_tail(op.operator)
-            elif isinstance(op, IterativeOp):
-                for it in op.iters:
-                    self._validate_tail(it)
 
-    def _validate_head(self, operators):
-        if len(operators) == 0:
-            raise Exception("Empty pipeline")
+def remove_prefix(text, prefix):
+    if text.startswith(prefix):
+        return text[len(prefix):]
+    return text
 
-        if not isinstance(operators[0], Source):
-            raise Exception("The pipeline does not start with a Source")
 
-    # Validates the pipeline
-    def _validate(self, ir):
-        if not isinstance(ir, Pipeline):
-            raise Exception("Not a pipeline")
+def remove_suffix(text, suffix):
+    if not text.endswith(suffix):
+        return text
+    return text[:len(text) - len(suffix)]
 
-        # Checks if the pipeline starts with a Source
-        self._validate_head(ir.operators)
 
-        # Validates the rest of the pipeline 
-        self._validate_tail(islice(operators, 1, None))
-        return ir
+def substitute_rvalue(locls, globls, match):
+    matched_str = match.group(0)
+    if matched_str.startswith("%{") and matched_str.endswith("}"):
+        # Extract the python variable name stripping the delimiters and
+        # whitespaces
+        py_var = matched_str[2:len(match.group(1)) - 1]
+        py_var = py_var.strip()
 
-    # Flattens the pipeline definition removing unnecessary nested pipelines. 
-    def _flatten(self, ir):
-        return ir
+        # First check local scope
+        py_var_val = locls[py_var]
 
-    @abc.abstractmethod
-    def gen(self, ir): 
-        """ Generates the code to run at the backend runtime.
+        # Check global scope
+        if not py_var_val:
+            py_var_val = globls[py_var]
 
-        Args:
-            ir: IR representation corresponding to the pipeline
+        if py_var_val:
+            return py_var_val
+    return matched_str
 
-        Returns:
-            The potentially modified ir representation.
 
-        Raises:
-            Exception: Invalid IR
-        """
-        return
+def annotate_lvalue(match):
+    matched_str = match.group(0)
+    if matched_str.startswith("%{") and matched_str.endswith("="):
+        # Annotate as a lvalue for so that rewrite step recognize it
+        lvalue_annotated = matched_str[:1] + "=" + matched_str[1:]
+        return lvalue_annotated
+    return matched_str
 
-    @abc.abstractmethod
-    def flush(self, ir):
-        """ Prepares and writes out the deployment artifact. 
 
-        Args:
-            ir: IR representation corresponding to the pipeline
+def rewrite_lvalue_assign(match):
+    matched_str = match.group(0)
+    if matched_str.startswith("%={") and (matched_str.endswith(";")
+                                          or matched_str.endswith("\n")):
+        # Extract the python variable name from %={varname} = value
+        py_var = matched_str[3:matched_str.index("}")].strip()
 
-        Returns:
-            The potentially modified ir representation.
+        # Extract the assigned value from %={varname} = value
+        value = matched_str[matched_str.index("}") + 1:]
+        value = value.strip()[1:]  # Skips the '=' after removing the padding
+        # value = value.strip()  # Remove any padding between '=' and value
 
-        Raises:
-            Exception: Invalid IR
-        """
-        return
+        # Echo the tagged variable assignment to stdout
+        echo_str = 'echo -e "[kiseru]{}={}"\n'.format(py_var, value)
+        return echo_str
+    return matched_str
 
-    def gen_descriptor(self, ir):
-        """ Generates a deployment descriptor for the pipeline.
 
-        Args:
-            ir: IR representation corresponding to the pipeline
+def modify_script(script_lines, regex, subst):
+    for lineno, line in enumerate(script_lines):
+        script_lines[lineno] = re.sub(r'{}'.format(regex), subst, line)
 
-        Returns:
-            The potentially modified ir representation.
 
-        Raises:
-            Exception: Invalid IR
-        """
-        return
+def interpolate(script_str, locls, globls):
+    lines = script_str.splitlines()
+    lines = list(map(lambda x: x + '\n', lines))  # Reintroduce the newlines
 
-    def run_passes(self, ir):
-        """ Runs registere code generation related passes one by one..
+    # varname is a python variable
+    # Match '%{varname} ='
+    lvalue_regex = '(%{\s*[a-zA-Z_]\w*\s*})\s*='
+    # Match '%{varname} = value\n' or '%{varname} = value;'
+    lvalue_assign_regex = '(%={\s*[a-zA-Z_]\w*\s*}\s*=.*[\n,;])'
+    # Match '%{varname}'
+    rvalue_regex = '(%{\s*[a-zA-Z_]\w*\s*})'
 
-        Args:
-            ir: IR representation corresponding to the pipeline
+    # Substitute python variables appearing as lvalues and rvlaues
+    # Order of method invocation is important. We first annotate lvalues.
+    # Then we run rvalue substitution which skips any annotated lvalues and
+    # only operating on rvalues. Finally we rewrite the lvalue assign.
+    modify_script(lines, lvalue_regex, annotate_lvalue)
+    modify_script(lines, rvalue_regex,
+                  functools.partial(substitute_rvalue, locls, globls))
+    modify_script(lines, lvalue_assign_regex, rewrite_lvalue_assign)
+    return ''.join(lines)
 
-        Returns:
-            The potentially modified ir representation.
 
-        Raises:
-            Exception: Invalid IR
-        """
-        for p in self.passes:
-            ir = p(ir)
-        return ir
+def run_script(script_str, locls, globls):
+    script_str = interpolate(script_str, locls, globls)
 
-class SMPBackend(Backend):
 
-    # default indentation size
-    INDENT = 4
+def sanitize(script):
+    lines = script.lines
 
-    def __init__(self):
-        Backend.__init__(self)
-        self._cur_level = 0
+    # Remove the '''bash delimiter of the inlined script
+    stripped = remove_prefix(lines[0].strip(), '\'\'\'bash')
+    if stripped:
+        # Add new line if the command spans over to a new line
+        if stripped.endswith('\\'):
+            stripped += '\n'
+        lines[0] = stripped
+    else:
+        del (lines[0])
 
-    def gen_descriptor(self, ir):
-        return ir
+    # Remove the ''' delimiter of the inlined script
+    stripped = remove_suffix(lines[len(lines) - 1].strip(), '\'\'\'')
 
-    def flush(self, ir):
-        print("Running flush")
-        fp = open('run.py', 'w')
-        for line in self.code:
-          fp.write("%s\n" % line)
-        fp.close()
-        return ir
+    if stripped:
+        stripped = stripped.strip()
+        stripped += '\n'
 
-    def gen(self, ir):
-        print("Running codegen")
-        # pickle the pipeline
-        self._gen_runnable(ir)
+        lines[len(lines) - 1] = stripped
+    else:
+        del (lines[len(lines) - 1])
 
-        # now to generate the code to run the pickled pipeline
-        # ...
-
-        # print import headers using obj.classes
-        self._gen_imports(ir.classes)
-        
-        # generate main function header 
-        self._gen_main_header()
-
-        # unpickle and run the pipeline 
-        self._gen_main_body()
-        return ir
-
-    def _gen_imports(self, classes):
-        # System imports
-        self._add("try:")
-        self._indent_plus()
-        self._add("import cPickle as pickle")
-        self._indent_minus()
-
-        self._add("except:")
-        self._indent_plus()
-        self._add("import pickle")
-        self._indent_minus()
-
-        self._addln("import sys")
-
-        # API imports
-        self._add("from Kiseru import Operator")
-        self._add("from Kiseru import ParallelOp")
-        self._add("from Kiseru import IterativeOp")
-        self._add("from Kiseru import Pipeline")
-        self._add("from Kiseru import Conditional")
-        self._addln("from Kiseru import RunnerType")
-
-        # Import the operators used in the pipeline
-        for cls in classes:
-            self._add("from Kiseru import {0}".format(cls))
-
-        self._addln("")
-
-    def _gen_main_header(self):
-        self._add("if __name__ == '__main__':")
-
-    def _gen_main_body(self):
-        self._indent_plus()
-        self._add("fp = open('test.dat', 'rb')")
-        self._add("p = pickle.load(fp)")
-        self._add("fp.close()")
-        self._add("p.run()")
-        self._indent_minus()
-
-    def _gen_runnable(self, pipeline):
-        fp = open("test.dat", 'wb')
-        pickle.dump(pipeline, fp)
-        fp.close()
-
-    def _add(self, line):
-        self.code.append(self._indent_line(line, self._cur_level * self.INDENT))
-
-    def _addln(self, line):
-        self._add(line)
-        self._add("")
-
-    def _indent_plus(self):
-        self._cur_level += 1
-
-    def _indent_minus(self):
-        self._cur_level -= 1
-
-    def _indent_line(self, line, nspaces):
-        indent = " " * nspaces 
-        return indent + line
-
-class Operator(metaclass=MetaClassManager):
-  
-    def __init__(self):
-        self.is_pipeline  = False
-        self.is_parallel  = False
-        self.is_iterative = False
-        self.until  = None
-
-    def _dispatch(self, other, func):
-        # If an operator is in the head position of a pipeline (either due to a 
-        # separate pipeline definition or implicitly due to the operator 
-        # precedence grouping) makes sure that we generate a nested pipeline 
-        # with the operator at the head position
-        if not isinstance(self, Pipeline):
-            # This isinstance check is a bit of a hack by breaking the 
-            # abstraction down the inheritance hierarchy. But it makes pipeline 
-            # definition simpler by making it possible to construct a new
-            # pipeline without explicitly instantiating Pipeline object at the 
-            # beginning
-            return getattr(getattr(Pipeline(), "__or__")(self), func)(other) 
+    # Now strip all other lines of extra whitespaces while preserving
+    # line breaks
+    for lineno, line in enumerate(lines):
+        if line[-1] == '\n':
+            stripped = line.strip() + '\n'
         else:
-            return getattr(self, func)(other)
+            stripped = line.strip()
+        lines[lineno] = stripped
 
-    def __or__(self, other):
-        return self._dispatch(other, "__or__")
+    # print(''.join(script.lines))
 
-    def __floordiv__(self, other):
-        return self._dispatch(other, "__floordiv__")
 
-    def __gt__(self, other):
-        return self._dispatch(other, "__gt__")
+params = {'split': None}
 
-    @abc.abstractmethod
-    def run(self, inputs, partition = 0):
-        return
 
-    def _run_wrapper(self, inputs):
-        return inputs
+def task(**params):
+    def decorator(func):
+        sig = signature(func)
+        new_sig = sig.replace(return_annotation=Signature.empty)
 
-    def codegen(self, backend):
-        backend.gen(self)
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Stage(func.__name__, args, kwargs)
+            lines = inspect.getsourcelines(func)[0]
+            # print(lines)
+            scripts = []
+            cur_script = []
+            cur_script_start = 0
+            in_script = False
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped.startswith('\'\'\'bash'):
+                    if in_script:
+                        raise Exception("Invalid inlined bash script")
+                    in_script = True
+                    cur_script_start = i
+                elif stripped.startswith('\'\'\''):
+                    in_script = False
+                    scripts.append(
+                        Script(lines[cur_script_start:i + 1],
+                               (cur_script_start, i)))
+                    cur_script.append(line)
 
-class FusedOperator(Operator):
-    
-    def __init__(self, operators):
-        Operator.__init__(self)
-        self.operators = operators
+                if stripped.endswith('\'\'\''):
+                    in_script = False
+                    if i != cur_script_start:
+                        cur_script.append(line)
+                    scripts.append(
+                        Script(lines[cur_script_start:i + 1],
+                               (cur_script_start, i)))
 
-class Source(metaclass=MetaClassManager):
+            for script in scripts:
+                print(script.linenos)
+                sanitize(script)
+                if len(script.lines) == 0:
+                    continue
+                script_str = ''.join(script.lines)
 
-    def __init__(self):
-        pass
+                # Replace the inlined bash script with a runtime call to
+                # run_script
+                run_script_str = \
+                    'run_script(\'{}\', locals(), globals())'.format(script_str)
+                lines[script.linenos[0]] = run_script_str
 
-    @abc.abstractmethod
-    def run(self):
-        pass
+                start, end = script.linenos
+                start += 1
+                end += 1
+                lines[start:end] = [None] * (end - start)
+                print(lines)
 
-class Preamble(Source):
+            lines = [line for line in lines if line != None]
+            print(lines)
 
-    def __gt__(self, other):
-        # Skips the preamble and returns a new pipeline
-        p = Pipeline()
-        p.is_top_level = True
-        return getattr(p, "__or__")(other)
+            ret = func(*args, **kwargs)
+            return ret
 
-class ParallelOp(Operator):
+        wrapper.__signature__ = new_sig
+        return wrapper
 
-    def __init__(self, operator, parallelism):
-        Operator.__init__(self)
-        self.is_parallel = True
-        self.operator    = operator
-        self.parallelism = parallelism
+    return decorator
 
-    def run(self, inputs = None):
-        # If the parallelism is not given, it is set to the number of processors by 
-        # parmap_dict
-        res = inputs
-        if self.parallelism == -1:
-            parmap_dict(self.operator.run, res, "__data__")
-        else:
-            parmap_dict(self.operator.run, res, "__data__", self.parallelism)
 
-class IterativeOp(Operator):
+@task(split='dfd')
+def add(a: int, b: int, c: int) -> _CSV:
+    b = a + c \
+            + a
+    '''bash ./ls -al %{sfdb} %{sdf} \
+            > ls.out
+       %{bar} = sdfs'''
+    '''bash grep -rl x
+        %{sdf} =df'''
+    return a + b + c
 
-    def __init__(self, iters, until):
-        Operator.__init__(self)
-        self.is_iterative = True
-        self.iters = iters
-        self.until = until
-
-        for it in iters:
-            if isinstance(it, Pipeline):
-                operator.is_pipeline  = True
-                operator.is_top_level = False 
-
-    def run(self, inputs = None):
-        res = inputs
-        for it in iters:
-            res = it.run(res)
-            if until.check(res) == False:
-                break
-        return res
-
-class Conditional(metaclass=abc.ABCMeta):
-
-    @abc.abstractmethod
-    def check(res):
-        return
-
-class Pipeline(Operator):
-
-    def __init__(self):
-        Operator.__init__(self)
-        self.operators = []
-        self.runner    = None
-        self.classes   = set() 
-        self.is_pipeline = True
-        self.is_top_level = False
-
-        # Private member fields
-        self._is_anonymous = False
-
-    def __or__(self, other):
-        return self.do(other) 
-
-    def __floordiv__(self, other):
-        return self.do_par(other)
-
-    def __contains__(self, other):
-        return self.do_par()
-
-    def _add_operator(self, operator):
-        self.operators.append(operator)
-        self.classes.union(self._get_classes(operator))
-
-    def do(self, operator):
-        if not isinstance(operator, Operator) :
-            raise Exception("Invalid operator")
-
-        self._add_operator(operator)
-        return self
-
-    def do_par(self, operator, parallelism = -1):
-        op = ParallelOp(operator, parallelism)
-        self._add_operator(operator)
-        return self
-
-    def do_iter(self, iters, until):
-        # Check if we got a list of operators
-        if isinstance(iters, list) and not isinstance(iters, str): 
-            is_valid = reduce(
-                (lambda op, res: 
-                (res and True) if isinstance(op, Operator) else False), iters) 
-            if not is_valid:
-                raise Exceptions("Not a valid operator pipeline")
-
-        # Check if we got a valid conditional
-        if not isinstance(until, Conditional):
-            raise Exception("Invalid conditional provided")
-        op = IterativeOp(iters, until)
-        self._add_operator(operator)
-        return self
-
-    def run(self, inputs = None, partition = 0):
-        if not self.is_top_level:
-            res = inputs
-            for operator in self.operators:
-                res = operator.run(res)
-        else:
-            # Runs the preamble 
-            self.operators[0].run() 
-
-            # Then runs the rest of the pipeline which should start with a Source
-            for i in range(1, len(self.operators)):
-                if isinstance(operator, Source):
-                    res = self.operators[i].run() 
-                else:
-                    res = self.operators[i].run(res)
-
-    def submit(self):
-        # default to LOCAL runner
-        if self.runner == None:
-            self.runner = RunnerType.SMP
-            backend = SMPBackend()
-            backend.run_passes(self)
-
-    def set_runner(self, runner):
-        self.runner = runner 
-
-    def _get_classes(self, operator):
-        classes = set() 
-        if isinstance(operator, Pipeline):
-            for op in operator.operators:
-                classes.union(self._get_classes(op))
-        elif isinstance(operator, ParallelOp):
-            classes.union(self._get_classes(operator.operator))
-        elif isinstance(operator, IterativeOp):
-            for it in operator.iters:
-                classes.union(self._get_classes(it))
-            classes.add(operator.until.__class__.__name__)
-        else:
-            classes.add(operator.__class__.__name__)
-        return classes
-
-class FooOperator(Operator):
-
-    def __init__(self):
-        self.input = {"__data__" : np.array([2, 3, 5])}
-
-    def run(self, obj, partition = 0):
-        print("Running Foo at thread %s" % threading.current_thread())
-        return self.input
-
-class BarOperator(Operator):
-
-    def run(self, obj, partition = 0):
-        obj["__data__"][0] = 0
-        print(obj)
-        return obj
 
 if __name__ == "__main__":
-    foo = FooOperator()
-    data = foo.input
-
-    print(data)
-
-    # p = foo // {'parllelism'=2, 'fdf'=34} in BarOperator() \
-    # p = startwith & {} in (bar, baz)  
-
-    p = foo | BarOperator()
-
-    p.run()
-
-    print(data)
-    p.submit()
-
-
-'''
-Operator Fusion for cluster task executer.
-Create a fused operator which accepts a array of operators
-to be called together.
-Use eval to gen the fused operator contaning operators to be fused
-and then pickle it
-Codegen to run the picked fused operator as an application
-
-arr = [1, 3, 5]
-
-class Foo:
-    def __init__(self, arr):
-        self.arr = arr
-
-    def foo(self):
-        for v in arr:
-            print(v)
-
-val = eval('Foo(arr)')
-val.foo()
-
-arr = [1, 3, 5]
-
-class Foo:
-    def __init__(self, arr):
-        self.arr = arr
-        self.foos = [self.foo, self.bar]
-
-    def foo(self):
-        for v in arr:
-            print(v)
-
-    def bar(self):
-        print(14)
-
-val = eval('Foo(arr)')
-val.foos[1]()
-'''
+    print(add(1, 2, 3))
