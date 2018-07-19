@@ -454,13 +454,19 @@ def process_scripts(fn):
 
 
 def normalize_fn_body(fn):
-    is_in_proto = False
     # Match the tail end of prototype line. Prototype is of the form
-    # 'def fn(..) -> type: <body or newline>' which may be
+    # 'def fn(..) [-> type]: <body | \n>' which may be
     # spread across multiple lines with '\' continuation
-    prototype_regex = re.compile("(.*\)\.*:)([.*|\s*\\\])")
+    prototype_regex = re.compile("(.*\)\.*:)(.*)")
+    proto_end = -1
+    first_line_of_body = []
+
+    print(fn.lines)
+    print("\n")
+    is_in_proto = False
     for lineno, line in enumerate(fn.lines):
         # This is the start of the function prototype
+        print(line)
         if line.lstrip().startswith("def "):
             is_in_proto = True
 
@@ -471,21 +477,53 @@ def normalize_fn_body(fn):
         if is_in_proto:
             match = re.search(prototype_regex, line)
             if match:
+                proto_end = lineno
                 protoype = match.group(1)
                 maybe_body = match.group(2)
                 match = re.search(whitespace_only_regex, maybe_body)
                 is_whitespace = True if match else False
 
+                if maybe_body.isspace():
+                    # Just a plain old function with a new line after ':'. We
+                    # are good. Nothing to normalize.
+                    return
+
                 # We have function body tacked on to the end of function
-                # protoype!!! Separate it and make it a line of its own
-                if not is_whitespace:
+                # prototype!!! Separate it and make it a line of its own
+                if maybe_body.strip().endswith('\\'):
+                    # Replace the current prototype
+                    fn.lines[lineno] = prototype + '\n'
+
+                    # Follow until the end of the line and add the accumulated
+                    # buffer as the first line of the body
+                    first_line_of_body = [maybe_body]
+                else:
                     # Replace the current prototype
                     fn.lines[lineno] = prototype + '\n'
                     # Add the newly separated body
                     fn_indent = get_indentation(fn.lines[0])
                     fn.lines.insert(lineno + 1,
                                     gen_spaces(fn_indent + 4) + maybe_body)
-                break
+                    return
+            else:
+                # Prototype is split in to multiple lines after ':'
+                # Whatever after ':' belongs to the first line of the body.
+                # Keep accumulating the first line of the body
+                first_line_of_body.append(line)
+                # Mark the line for deletion
+                fn.lines[lineno] = None
+                if not line.strip().endswith('\\'):
+                    # We have arrived at the end of the first and last line
+                    # of the function. Add the newly separated body after the
+                    # prototype
+                    fn_indent = get_indentation(fn.lines[0])
+                    fn.lines.insert(
+                        proto_end + 1,
+                        gen_spaces(fn_indent + 4) +
+                        ''.join(first_line_of_body))
+                    is_in_proto = False
+
+    fn.lines = [line for line in fn.lines if line != None]
 
 
 def set_function_meta(fn):
