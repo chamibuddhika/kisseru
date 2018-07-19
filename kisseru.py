@@ -457,17 +457,15 @@ def normalize_fn_body(fn):
     # Match the tail end of prototype line. Prototype is of the form
     # 'def fn(..) [-> type]: <body | \n>' which may be
     # spread across multiple lines with '\' continuation
-    prototype_regex = re.compile("(.*\)\.*:)(.*)")
+    prototype_regex = re.compile("(.*\).*:)(.*)", re.DOTALL)
     proto_end = -1
     first_line_of_body = []
 
-    print(fn.lines)
-    print("\n")
     is_in_proto = False
     for lineno, line in enumerate(fn.lines):
         # This is the start of the function prototype
         print(line)
-        if line.lstrip().startswith("def "):
+        if line != None and line.lstrip().startswith("def "):
             is_in_proto = True
 
         # We set 'is_in_proto' in above conditional and do the prototype
@@ -478,10 +476,8 @@ def normalize_fn_body(fn):
             match = re.search(prototype_regex, line)
             if match:
                 proto_end = lineno
-                protoype = match.group(1)
+                prototype = match.group(1)
                 maybe_body = match.group(2)
-                match = re.search(whitespace_only_regex, maybe_body)
-                is_whitespace = True if match else False
 
                 if maybe_body.isspace():
                     # Just a plain old function with a new line after ':'. We
@@ -512,6 +508,7 @@ def normalize_fn_body(fn):
                 first_line_of_body.append(line)
                 # Mark the line for deletion
                 fn.lines[lineno] = None
+                print("At line {}".format(line))
                 if not line.strip().endswith('\\'):
                     # We have arrived at the end of the first and last line
                     # of the function. Add the newly separated body after the
@@ -564,22 +561,35 @@ def process_fn(func):
 
     # Sanitize and gather meta data about the function
     print("BEFORE NORMALIZE FN BODY:\n")
+    before_lines = fn.lines
     print(fn.lines)
     print("\n")
+
     normalize_fn_body(fn)
+
     print("AFTER  NORMALIZE FN BODY:\n")
+    after_lines = fn.lines
     print(fn.lines)
+    print("\n")
+
+    equal = functools.reduce((lambda val, accum: val and accum),
+                             map(lambda x, y: True if x == y else False,
+                                 before_lines, after_lines), True)
+    if equal:
+        print("BEFORE AND AFTER EQUALS..\n")
+    else:
+        print("BEFORE AND AFTER DOES NOT EQUALS..\n")
     print("\n")
 
     set_function_meta(fn)
 
     # Now handle inlined bash scripts
     extract_scripts(fn)
-    print("BEFORE EXTRACT SCRIPTS:\n")
+    print("BEFORE PROCESS SCRIPTS:\n")
     print(fn.lines)
     print("\n")
     process_scripts(fn)
-    print("AFTER EXTRACT SCRIPTS:\n")
+    print("AFTER PROCESS SCRIPTS:\n")
     print(fn.lines)
     print("\n")
 
