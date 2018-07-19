@@ -4,6 +4,7 @@ import subprocess
 import inspect
 import re
 import functools
+import types
 
 from enum import Enum
 
@@ -98,7 +99,7 @@ def substitute_rvalue(locls, globls, script_env, match):
             py_var_val = globls.get(py_var, None)
 
         if py_var_val:
-            return py_var_val
+            return str(py_var_val)
     return matched_str
 
 
@@ -111,7 +112,7 @@ def annotate_lvalue(match):
     return matched_str
 
 
-KISERU_TAG = "[kiseru]"
+KISERU_TAG = "<<kiseru>>"
 
 
 def rewrite_lvalue_assign(match):
@@ -127,7 +128,8 @@ def rewrite_lvalue_assign(match):
         # value = value.strip()  # Remove any padding between '=' and value
 
         # Echo the tagged variable assignment to stdout
-        echo_str = 'echo "\n{}{}={}"\n'.format(KISERU_TAG, py_var, value)
+        echo_str = '{}={}\necho "{}{}=\'${}\n\'"\n'.format(
+            py_var, value, KISERU_TAG, py_var, py_var)
         return echo_str
     return matched_str
 
@@ -165,8 +167,15 @@ def interpolate(script_str, locls, globls, script_env):
     return result
 
 
+class ScriptOutput(object):
+    def __init__(self, stdout, stderr):
+        self.stdout = stdout
+        self.stderr = stderr
+
+
 def run_script(script_str, locls, globls, script_env):
     result = interpolate(script_str, locls, globls, script_env)
+    print(result.script)
     p = subprocess.Popen(
         result.script,
         stdout=subprocess.PIPE,
@@ -175,22 +184,8 @@ def run_script(script_str, locls, globls, script_env):
         universal_newlines=True)
     stdout, stderr = p.communicate()
 
-    ScriptOutput = namedtuple('ScriptOutput', 'stdout stderr')
-    output = (stdout, stderr)
-    df = 'dfd'
-
+    output = ScriptOutput(stdout, stderr)
     return output
-    '''
-    print("Ran ..")
-    print(script_str)
-    print(" ---- [stdout] ----")
-    print(stdout)
-    print("")
-
-    print(" ---- [stderr] ----")
-    print(stderr)
-    print("")
-    '''
 
 
 def sanitize(script):
@@ -300,10 +295,8 @@ def static_analyze_script(lines):
     set_vars(lines, var_regex, analysis.vars)
     # Set lvalues
     set_vars(lines, lvalue_regex, analysis.lvalues)
-    # print(analysis.lvalues)
     # Set rvalues
     analysis.rvalues = analysis.vars - analysis.lvalues
-    # print(analysis.rvalues)
 
     return analysis
 
@@ -313,11 +306,12 @@ def set_assignments(stdout, env):
     lines = stdout.splitlines()
 
     # Match '[kiseru]var = value\n' and capture just the varname and value
-    extract_assigns_regex = re.compile(
-        '\s*\[{}\]([a-zA-Z_]\w*)\s*=\s*(.*)\n'.format(KISERU_TAG))
+    extract_assigns_str = '\s*{}([a-zA-Z_]\w*)\s*=\s*\'(.*)\s*'.format(
+        KISERU_TAG)
+    extract_assigns_regex = re.compile(extract_assigns_str)
 
     for line in lines:
-        match = re.search(r'{}'.format(extract_assigns_regex), line)
+        match = re.search(extract_assigns_regex, line)
         if match:
             varname = match.group(1)
             value = match.group(2)
@@ -328,10 +322,7 @@ def do_alpha_rename(match):
     prefix = match.group(1)
     variable = match.group(2)
     suffix = match.group(3)
-    print("PREFIX {}".format(prefix))
-    print("VARIABLE {}".format(variable))
-    print("SUFFIX {}".format(suffix))
-    return '{}__kiseru_assigns[{}]{}'.format(prefix, variable, suffix)
+    return '{}__kiseru_assigns[\'{}\']{}'.format(prefix, variable, suffix)
 
 
 # Alpha rename the python variables modified within inlined bash scripts
@@ -397,18 +388,13 @@ def process_scripts(fn):
     _set_script_env = "__kiseru_assigns = {}\n"
 
     for i, script in enumerate(fn.scripts):
-        # print(script.linenos)
         sanitize(script)
         if len(script.lines) == 0:
             continue
 
-        print("script {}".format(i))
         analysis = static_analyze_script(script.lines)
 
         script_str = ''.join(script.lines)
-
-        # print(script_str)
-        # print("")
 
         # run_script(script_str, {"param1": ".", "param2": ".."}, {}, {})
         '''
@@ -464,7 +450,6 @@ def normalize_fn_body(fn):
     is_in_proto = False
     for lineno, line in enumerate(fn.lines):
         # This is the start of the function prototype
-        print(line)
         if line != None and line.lstrip().startswith("def "):
             is_in_proto = True
 
@@ -508,7 +493,7 @@ def normalize_fn_body(fn):
                 first_line_of_body.append(line)
                 # Mark the line for deletion
                 fn.lines[lineno] = None
-                print("At line {}".format(line))
+
                 if not line.strip().endswith('\\'):
                     # We have arrived at the end of the first and last line
                     # of the function. Add the newly separated body after the
@@ -544,56 +529,47 @@ def set_function_meta(fn):
                 fn.body_start = lineno + 1
                 is_in_proto = False
                 fn.body_indent = get_indentation(fn.lines[fn.body_start])
-                print("{} : {}\n".format(fn.body_start, fn.body_indent))
                 return
     if fn.proto_start == -1 or fn.proto_end == -1:
         raise Exception("Invalid function prototype for function {}".format(
             fn.name))
 
 
+def recompile(fn, old_func):
+    source = ''.join(fn.lines)
+
+    print(source)
+    print("\n")
+
+    module = ast.parse(source)
+    func = module.body[0]
+    module_code = compile(source, '<string>', 'exec')
+
+    func_code = None
+    for const in module_code.co_consts:
+        if isinstance(const, types.CodeType):
+            func_code = const
+
+    new_fn = types.FunctionType(
+        func_code, old_func.__globals__.copy(), name=fn.name)
+    return new_fn
+
+
 def process_fn(func):
     fn = Function()
     fn.name = func.__name__
     fn.lines = inspect.getsourcelines(func)[0]
+    del fn.lines[0]
 
     if len(fn.lines) <= 0:
         raise Exception("Empty function {}".format(fn.name))
 
-    # Sanitize and gather meta data about the function
-    print("BEFORE NORMALIZE FN BODY:\n")
-    before_lines = fn.lines
-    print(fn.lines)
-    print("\n")
-
     normalize_fn_body(fn)
 
-    print("AFTER  NORMALIZE FN BODY:\n")
-    after_lines = fn.lines
-    print(fn.lines)
-    print("\n")
-
-    equal = functools.reduce((lambda val, accum: val and accum),
-                             map(lambda x, y: True if x == y else False,
-                                 before_lines, after_lines), True)
-    if equal:
-        print("BEFORE AND AFTER EQUALS..\n")
-    else:
-        print("BEFORE AND AFTER DOES NOT EQUALS..\n")
-    print("\n")
-
     set_function_meta(fn)
-
-    # Now handle inlined bash scripts
     extract_scripts(fn)
-    print("BEFORE PROCESS SCRIPTS:\n")
-    print(fn.lines)
-    print("\n")
     process_scripts(fn)
-    print("AFTER PROCESS SCRIPTS:\n")
-    print(fn.lines)
-    print("\n")
-
-    return fn
+    return recompile(fn, func)
 
 
 params = {'split': None}
@@ -602,41 +578,30 @@ params = {'split': None}
 def task(**params):
     def decorator(func):
         sig = signature(func)
-        new_sig = sig.replace(return_annotation=Signature.empty)
+        # new_sig = sig.replace(return_annotation=Signature.empty)
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Stage(func.__name__, args, kwargs)
             fn = process_fn(func)
-
-            print("MODIFIED FUNCTION: ..\n")
-            print(''.join(fn.lines))
-            print("\n")
-
-            ret = func(*args, **kwargs)
+            print("Invoking the modified function...")
+            ret = fn(*args, **kwargs)
             return ret
 
-        wrapper.__signature__ = new_sig
+        # wrapper.__signature__ = new_sig
+        print("Return wrapper...")
         return wrapper
 
     return decorator
-
-
-'''ls -al %{param1} %{param2} \
-            > ls.out
-       %{param3} = `cat ls.out`'''
-'''grep -rl . dsf
-       %{param4} = %{param3}'''
 
 
 @task(split='dfd')
 def add(a: int, b: int, c: int) -> _CSV:
     b = a + c \
             + a
-    '''bash ls -al %{b}'''
-    '''bash grep -rl %{d}
-            %{d} = `time`'''
-    return b + d + c
+    '''bash ls -al > %{b}.txt'''
+    '''bash %{d} =`cat %{b}.txt`'''
+    return d
 
 
 if __name__ == "__main__":
