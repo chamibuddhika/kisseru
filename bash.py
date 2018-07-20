@@ -378,6 +378,6 @@ def extract_scripts(fn):
     fn.scripts = scripts
 
 
-def handle_scripts(fnIR):
-    extract_scripts(fnIR)
-    process_scripts(fnIR)
+def handle_scripts(fn_ir):
+    extract_scripts(fn_ir)
+    process_scripts(fn_ir)

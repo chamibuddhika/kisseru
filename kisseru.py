@@ -3,6 +3,9 @@ import inspect
 import types
 import re
 import functools
+import logging
+
+import time
 
 from enum import Enum
 
@@ -12,12 +15,37 @@ from inspect import signature
 from func import parse_fn
 from func import recompile
 from bash import handle_scripts
+from handler import Context
+from handler import HandlerRegistry
+from logger import LoggerEntry
+from logger import LoggerExit
+from func import ASTOps
+from profiler import ProfilerEntry
+from profiler import ProfilerExit
 
 # Need these to be in global environment when recompile is run
 from bash import run_script
 from bash import set_assignments
 
 _CSV = 'CSV'
+
+logger = logging.getLogger(__name__)
+
+# Setup kiseru logging
+logging.basicConfig(level=logging.INFO)
+
+# Setup kiseru handlers
+prof_entry = ProfilerEntry("ProfilerEntry")
+prof_exit = ProfilerExit("ProfilerExit")
+logger_entry = LoggerEntry("LoggerEntry")
+logger_exit = LoggerExit("LoggerExit")
+ast_ops = ASTOps("ASTOps")
+
+HandlerRegistry.register_prehandler(logger_entry)
+HandlerRegistry.register_prehandler(ast_ops)
+HandlerRegistry.register_prehandler(prof_entry)
+HandlerRegistry.register_posthandler(prof_exit)
+HandlerRegistry.register_posthandler(logger_exit)
 
 
 class Types(Enum):
@@ -52,13 +80,23 @@ def task(**params):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Stage(func.__name__, args, kwargs)
-            fn = process_fn(func)
-            print("Invoking the modified function...")
-            ret = fn(*args, **kwargs)
+            ctx = Context(func)
+
+            print("Running pre handlers")
+            print(HandlerRegistry().pre_handlers)
+            for pre in HandlerRegistry.pre_handlers:
+                pre.run(ctx)
+
+            ret = ctx.fn(*args, **kwargs)
+            ctx.ret = ret
+
+            for post in HandlerRegistry.post_handlers:
+                post.run(ctx)
+
             return ret
 
         # wrapper.__signature__ = new_sig
-        print("Return wrapper...")
+        logger.info("Return wrapper")
         return wrapper
 
     return decorator
@@ -70,6 +108,7 @@ def add(a: int, b: int, c: int) -> _CSV:
             + a
     '''bash ls -al > %{b}.txt'''
     '''bash %{d} =`cat %{b}.txt`'''
+    time.sleep(12)
     return d
 
 

@@ -2,11 +2,17 @@ import ast
 import inspect
 import re
 import types
+import logging
 
 from ir import Function
 from ir import Script
+from handler import Handler
+from handler import HandlerRegistry
+from bash import handle_scripts
 
 from utils import *
+
+logger = logging.getLogger(__name__)
 
 
 def recompile(fn, old_func):
@@ -140,3 +146,14 @@ def parse_fn(func):
     normalize_fn_body(fn)
     set_function_meta(fn)
     return fn
+
+
+class ASTOps(Handler):
+    def __init__(self, name):
+        Handler.__init__(self, name)
+
+    def run(self, ctx):
+        fn = ctx.fn
+        fn_ir = parse_fn(fn)
+        handle_scripts(fn_ir)
+        ctx.fn = recompile(fn_ir, fn)
