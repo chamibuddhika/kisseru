@@ -113,10 +113,12 @@ def annotate_lvalue(match):
 
 
 KISERU_TAG = "<<kiseru>>"
+KISERU_END_TAG = "<<kiseru_end>>"
 
 
 def rewrite_lvalue_assign(match):
     matched_str = match.group(0)
+    # Check if this is a previously annotated lvalue assignment
     if matched_str.startswith("%={") and (matched_str.endswith(";")
                                           or matched_str.endswith("\n")):
         # Extract the python variable name from %={varname} = value
@@ -127,10 +129,16 @@ def rewrite_lvalue_assign(match):
         value = value.strip()[1:]  # Skips the '=' after removing the padding
         # value = value.strip()  # Remove any padding between '=' and value
 
-        # Echo the tagged variable assignment to stdout
-        echo_str = '{}={}\necho "{}{}=\'${}\n\'"\n'.format(
-            py_var, value, KISERU_TAG, py_var, py_var)
-        return echo_str
+        # Echo the tagged variable assignment to stdout. Three things involved.
+        # 1. Set the value to a bash variable with the same name
+        # 2. Output the value of the bash variable with KISERU_TAG so that we
+        #    can later extract it out.
+        # 3. Write the KISERU_END_TAG at the end of the output so that we can
+        #    correctly extract out multi line outputs
+        set_var = '{}={}\n'.format(py_var.strip(), value.strip())
+        echo = 'echo "{}{}=${}"\n'.format(KISERU_TAG, py_var, py_var)
+        end_output = 'echo "{}"'.format(KISERU_END_TAG)
+        return set_var + echo + end_output
     return matched_str
 
 
@@ -306,16 +314,30 @@ def set_assignments(stdout, env):
     lines = stdout.splitlines()
 
     # Match '[kiseru]var = value\n' and capture just the varname and value
-    extract_assigns_str = '\s*{}([a-zA-Z_]\w*)\s*=\s*\'(.*)\s*'.format(
+    extract_assigns_str = '\s*{}([a-zA-Z_]\w*)\s*=\s*(.*)\s*'.format(
         KISERU_TAG)
     extract_assigns_regex = re.compile(extract_assigns_str)
 
+    is_in_output = False
+    output = []
+    varname = None
     for line in lines:
+        if is_in_output:
+            if line.startswith(KISERU_END_TAG):
+                is_in_output = False
+                env[varname] = '\n'.join(output)
+                varname = None
+                output = []
+                continue
+            else:
+                output.append(line.rstrip())
+                continue
+
         match = re.search(extract_assigns_regex, line)
         if match:
+            is_in_output = True
             varname = match.group(1)
-            value = match.group(2)
-            env[varname] = value
+            output = [match.group(2).rstrip()]
 
 
 def do_alpha_rename(match):
