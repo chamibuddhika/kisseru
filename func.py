@@ -17,7 +17,7 @@ from utils import *
 from bash import run_script
 from bash import set_assignments
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def recompile(fn, old_func):

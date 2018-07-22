@@ -26,7 +26,7 @@ from profiler import ProfilerExit
 
 _CSV = 'CSV'
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 # Setup kiseru logging
 logging.basicConfig(level=logging.INFO)
@@ -67,11 +67,21 @@ def process_fn(func):
 
 
 class Task(object):
-    def __init__(self, fn, args, kwargs):
+    def __init__(self, runner, fn, args, kwargs):
+        self.runner = runner
         self.fn = fn
         self.args = args
         self.kwargs = kwargs
         self.id = None
+        self._set_inputs(fn, args, kwargs)
+
+    def _set_inputs(self, fn, args, kwargs):
+        print(*args)
+        print(kwargs)
+        print(inspect.signature(fn))
+        # ba = inspect.signature(fn).bind(*args, kwargs)
+        # ba.apply_defaults()
+        # print(ba)
 
     def set_id(self, tid):
         self.id = tid
@@ -101,10 +111,11 @@ def gen_runner(fn, *args, **kwargs):
 
         print(args)
         print(kwargs)
-        # [FIXME] Doesn't handle default arguments at the moment. Fix it.
         ret = None
+        ba = signature(fn).bind(*args, **kwargs)
+        ba.apply_defaults()
         try:
-            ret = ctx.fn(*args, **kwargs)
+            ret = ctx.fn(*ba.args, **ba.kwargs)
         except:
             # [TODO] Ideally we want to match the original line info in the
             # printed trace back for better script debuggability. We should
@@ -124,17 +135,20 @@ def gen_runner(fn, *args, **kwargs):
 def task(**params):
     def decorator(func):
         sig = signature(func)
+        for p in sig.parameters:
+            print(sig.parameters[p].annotation)
+        print(sig.return_annotation)
         # new_sig = sig.replace(return_annotation=Signature.empty)
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             global _graph
-            task = Task(gen_runner(func, *args, **kwargs), args, kwargs)
+            task = Task(gen_runner(func, *args, **kwargs), func, args, kwargs)
             _graph.add_task(task)
-            return task.fn()
+            return task.runner()
 
         # wrapper.__signature__ = new_sig
-        logger.info("Return wrapper")
+        log.info("Return wrapper")
         return wrapper
 
     return decorator
