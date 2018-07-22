@@ -12,6 +12,11 @@ from bash import handle_scripts
 
 from utils import *
 
+# Need these to be in global environment when recompile is run so that we can
+# include them in the newly generated function's global scope
+from bash import run_script
+from bash import set_assignments
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,8 +35,10 @@ def recompile(fn, old_func):
         if isinstance(const, types.CodeType):
             func_code = const
 
-    new_fn = types.FunctionType(
-        func_code, old_func.__globals__.copy(), name=fn.name)
+    globs = old_func.__globals__.copy()
+    globs['run_script'] = run_script
+    globs['set_assignments'] = set_assignments
+    new_fn = types.FunctionType(func_code, globs, name=fn.name)
     return new_fn
 
 

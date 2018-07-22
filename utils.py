@@ -28,6 +28,5 @@ def get_indentation(line):
                 indent += 4
             else:
                 indent += 1
-
         return indent
     return 0

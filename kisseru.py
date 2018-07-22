@@ -8,7 +8,6 @@ import logging
 import time
 
 from enum import Enum
-
 from inspect import Signature
 from inspect import signature
 
@@ -22,10 +21,6 @@ from logger import LoggerExit
 from func import ASTOps
 from profiler import ProfilerEntry
 from profiler import ProfilerExit
-
-# Need these to be in global environment when recompile is run
-from bash import run_script
-from bash import set_assignments
 
 _CSV = 'CSV'
 
@@ -100,17 +95,3 @@ def task(**params):
         return wrapper
 
     return decorator
-
-
-@task(split='dfd')
-def add(a: int, b: int, c: int) -> _CSV:
-    b = a + c \
-            + a
-    '''bash ls -al > %{b}.txt'''
-    '''bash %{d} =`cat %{b}.txt`'''
-    time.sleep(12)
-    return d
-
-
-if __name__ == "__main__":
-    print(add(1, 2, 3))
