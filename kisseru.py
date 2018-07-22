@@ -1,5 +1,7 @@
 import ast
+import uuid
 import inspect
+import traceback
 import types
 import re
 import functools
@@ -64,7 +66,59 @@ def process_fn(func):
     return recompile(fnIR, func)
 
 
+class Task(object):
+    def __init__(self, fn, args, kwargs):
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.id = None
+
+    def set_id(self, tid):
+        self.id = tid
+
+
+class TaskGraph(object):
+    _tasks = {}
+
+    def add_task(self, task):
+        task.set_id(uuid.uuid1())
+        self._tasks[task.id] = task
+
+
+_graph = TaskGraph()
+
 params = {'split': None}
+
+
+def gen_runner(fn, *args, **kwargs):
+    def run_task():
+        ctx = Context(fn)
+
+        print("Running pre handlers")
+        print(HandlerRegistry().pre_handlers)
+        for pre in HandlerRegistry.pre_handlers:
+            pre.run(ctx)
+
+        print(args)
+        print(kwargs)
+        # [FIXME] Doesn't handle default arguments at the moment. Fix it.
+        ret = None
+        try:
+            ret = ctx.fn(*args, **kwargs)
+        except:
+            # [TODO] Ideally we want to match the original line info in the
+            # printed trace back for better script debuggability. We should
+            # probably be able to do that by playing with the exception stack
+            # trace.
+            traceback.print_exc()
+        ctx.ret = ret
+        print(ctx.ret)
+
+        for post in HandlerRegistry.post_handlers:
+            post.run(ctx)
+        return ret
+
+    return run_task
 
 
 def task(**params):
@@ -74,21 +128,10 @@ def task(**params):
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            # Stage(func.__name__, args, kwargs)
-            ctx = Context(func)
-
-            print("Running pre handlers")
-            print(HandlerRegistry().pre_handlers)
-            for pre in HandlerRegistry.pre_handlers:
-                pre.run(ctx)
-
-            ret = ctx.fn(*args, **kwargs)
-            ctx.ret = ret
-
-            for post in HandlerRegistry.post_handlers:
-                post.run(ctx)
-
-            return ret
+            global _graph
+            task = Task(gen_runner(func, *args, **kwargs), args, kwargs)
+            _graph.add_task(task)
+            return task.fn()
 
         # wrapper.__signature__ = new_sig
         logger.info("Return wrapper")

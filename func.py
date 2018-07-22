@@ -26,15 +26,19 @@ def recompile(fn, old_func):
     print(source)
     print("\n")
 
+    with open(".{}.py".format(fn.name), "w") as script:
+        script.write(source)
+
     module = ast.parse(source)
     func = module.body[0]
-    module_code = compile(source, '<string>', 'exec')
+    module_code = compile(source, ".{}.py".format(fn.name), 'exec')
 
     func_code = None
     for const in module_code.co_consts:
         if isinstance(const, types.CodeType):
             func_code = const
 
+    print(func_code.co_lnotab)
     globs = old_func.__globals__.copy()
     globs['run_script'] = run_script
     globs['set_assignments'] = set_assignments
