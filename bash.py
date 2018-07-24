@@ -1,5 +1,6 @@
 import subprocess
 import re
+import logging
 import functools
 
 from collections import namedtuple
@@ -7,6 +8,8 @@ from itertools import islice
 
 from ir import Script
 from utils import *
+
+log = logging.getLogger(__name__)
 
 KISERU_TAG = "<<kiseru>>"
 KISERU_END_TAG = "<<kiseru_end>>"
@@ -113,7 +116,18 @@ class ScriptOutput(object):
 
 def run_script(script_str, locls, globls, script_env):
     result = interpolate(script_str, locls, globls, script_env)
-    print(result.script)
+
+    # Following wierd formatting is necessary for the logger to correctly print
+    # this string as intended
+    info_str = """
+---------------------
+Expanded bash script:
+---------------------
+{}
+---------------------
+""".format(result.script)
+    logp_info(log, info_str)
+
     p = subprocess.Popen(
         result.script,
         stdout=subprocess.PIPE,

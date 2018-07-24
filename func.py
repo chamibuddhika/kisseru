@@ -23,8 +23,17 @@ log = logging.getLogger(__name__)
 def recompile(fn, old_func):
     source = ''.join(fn.lines)
 
-    print(source)
-    print("\n")
+    # Following wierd formatting is necessary for the logger to correctly print
+    # this string as intended
+    info_str = """
+--------------------------
+Generated python function:
+--------------------------
+{}
+---------------------------
+""".format(source)
+
+    logp_info(log, info_str)
 
     with open(".{}.py".format(fn.name), "w") as script:
         script.write(source)
@@ -38,7 +47,6 @@ def recompile(fn, old_func):
         if isinstance(const, types.CodeType):
             func_code = const
 
-    print(func_code.co_lnotab)
     globs = old_func.__globals__.copy()
     globs['run_script'] = run_script
     globs['set_assignments'] = set_assignments
