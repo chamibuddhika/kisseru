@@ -40,10 +40,23 @@ class FileType(Type):
         self.domain = domain
 
 
-def UserDefineType(Type):
+def UserDefinedType(Type):
     def __init__(self, type_id, typ):
         Type.__init__(self, type_id, typ)
         self.meta = MetaType.USER_DEF
+
+
+class TypeCheck(Pass):
+
+    # [TODO] Type checker should be able to catch argument mismatch errors.
+    # We should also be able to do some level of type inferencing at this
+    # level. This transformation is also important for implicit data type
+    # transformation pass to work.
+    def run(self, graph, ctx):
+        pass
+
+    def post_run(self, graph, ctx):
+        pass
 
 
 def get_type(typ):
