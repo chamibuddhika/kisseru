@@ -22,6 +22,7 @@ from profiler import ProfilerEntry
 from profiler import ProfilerExit
 from typed import get_type
 from typed import Type
+from utils import gen_tuple
 
 _CSV = 'CSV'
 
@@ -67,12 +68,14 @@ class Task(object):
     def __init__(self, runner, fn, args, kwargs):
         self._runner = runner
         self._fn = fn
-        self.args = {}
+        self._args = {}
+
         self.inputs = {}
         self.outputs = {}
         self.edges = []
         self.name = fn.__name__
         self.id = None
+        self.latch = 0
 
         self._set_inputs(fn, args, kwargs)
         self._set_outputs(fn)
@@ -99,7 +102,7 @@ class Task(object):
                 py_type = type(value)
             param_type = get_type(py_type)
 
-            self.args[pname] = value
+            self._args[pname] = value
             inport = Port(param_type, pname, self)
             self.inputs[pname] = inport
 
@@ -108,10 +111,12 @@ class Task(object):
                 # Get the only out-port of the parent task
                 outport = next(iter(parent.outputs.values()))
                 parent.edges.append(Edge(outport, inport))
+                self.latch += 1
             elif isinstance(value, Tasklet):
                 parent = value.parent
                 outport = parent.outputs[value.out_slot_in_parent]
                 parent.edges.append(Edge(outport, inport))
+                self.latch += 1
             '''
             if not isinstance(value, param_type):
                 if is_coerceable(value, param_type):
@@ -133,12 +138,15 @@ class Task(object):
             self.outputs[str(0)] = Port(
                 get_type(sig.return_annotation), str(0), self)
 
+    def run(self):
+        return self._runner(**self._args)
+
 
 class TaskGraph(object):
     _tasks = {}
 
     def add_task(self, task):
-        task.set_id(uuid.uuid1())
+        task.id = uuid.uuid1()
         self._tasks[task.id] = task
 
 
@@ -165,7 +173,6 @@ def gen_runner(fn):
             # trace.
             traceback.print_exc()
         ctx.ret = ret
-        print(ctx.ret)
 
         for post in HandlerRegistry.post_handlers:
             post.run(ctx)
@@ -174,18 +181,36 @@ def gen_runner(fn):
     return run_task
 
 
+def gen_task(func, args, kwargs):
+    task = Task(gen_runner(func), func, args, kwargs)
+    # Check if the task returns multiple values.
+    rets = inspect.signature(func).return_annotation
+    tasklets = []
+    if type(rets) == tuple:
+        # [TODO] Support named out-ports. One way to do that would be to
+        # specify the return annotation as
+        #  ... -> 'return_1:typ_1, ..., return_N:typ_N'
+        for index, ret in enumerate(rets):
+            tasklets.append(Tasklet(task, index))
+    tup = gen_tuple(tasklets)
+    if tup == None:
+        log.error("Task returning more than 10 outputs.")
+        raise Exception("Task returning more than 10 outputs")
+    return (task, tup)
+
+
 def task(**params):
     def decorator(func):
-        # new_sig = sig.replace(return_annotation=Signature.empty)
-
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             global _graph
-            task = Task(gen_runner(func), func, args, kwargs)
+            task, tasklets = gen_task(func, args, kwargs)
             _graph.add_task(task)
-            return task.run()
+            if tasklets == ():
+                return task.run()
+            else:
+                return tasklets
 
-        # wrapper.__signature__ = new_sig
         log.info("Return wrapper")
         return wrapper
 

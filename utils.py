@@ -1,6 +1,8 @@
 import re
 import logging
 
+################### String Utilities ######################
+
 
 def gen_spaces(n_spaces):
     spaces = ''
@@ -31,6 +33,38 @@ def get_indentation(line):
                 indent += 1
         return indent
     return 0
+
+
+################### Data Structure Utilities ######################
+
+
+def gen_tuple(ls):
+    if ls == None or type(ls) != list:
+        return ()
+
+    if not len(ls):
+        return ()
+    elif len(ls) > 10:
+        return None
+
+    length = len(ls)
+    switcher = {
+        1: (ls[0]),
+        2: (ls[0], ls[1]),
+        3: (ls[0], ls[1], ls[2]),
+        4: (ls[0], ls[1], ls[2], ls[3]),
+        5: (ls[0], ls[1], ls[2], ls[3], ls[4]),
+        6: (ls[0], ls[1], ls[2], ls[3], ls[4], ls[5]),
+        7: (ls[0], ls[1], ls[2], ls[3], ls[4], ls[5], ls[6]),
+        8: (ls[0], ls[1], ls[2], ls[3], ls[4], ls[5], ls[6], ls[7]),
+        9: (ls[0], ls[1], ls[2], ls[3], ls[4], ls[5], ls[6], ls[7], ls[8]),
+        10: (ls[0], ls[1], ls[2], ls[3], ls[4], ls[5], ls[6], ls[7], ls[8],
+             ls[9])
+    }
+    return switcher.get(length, None)
+
+
+################### Logging Utilities ######################
 
 
 def _set_log(log, fmt):
