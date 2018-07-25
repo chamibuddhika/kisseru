@@ -44,27 +44,6 @@ HandlerRegistry.register_posthandler(prof_exit)
 HandlerRegistry.register_posthandler(logger_exit)
 
 
-class Types(Enum):
-    CSV = 1
-    ESRI = 2
-    GRB = 3
-    NETCDF4 = 4
-
-
-class Stage(object):
-    def __init__(self, task, args, kwargs):
-        self.task = task
-        self.args = args
-        self.kwargs = kwargs
-        self.uuid = uuid.uuid1()
-
-
-def process_fn(func):
-    fnIR = parse_fn(func)
-    handle_scripts(fnIR)
-    return recompile(fnIR, func)
-
-
 class Port(object):
     def __init__(self, typ, index, task):
         self.type = typ
@@ -73,7 +52,7 @@ class Port(object):
 
 
 class Edge(object):
-    def __init__(self):
+    def __init__(self, source, dest):
         self.source = None
         self.dest = None
 
@@ -120,10 +99,19 @@ class Task(object):
                 py_type = type(value)
             param_type = get_type(py_type)
 
-            if isinstance(value, Task):
-                pass
             self.args[pname] = value
-            self.inputs[pname] = Port(param_type, pname, self)
+            inport = Port(param_type, pname, self)
+            self.inputs[pname] = inport
+
+            if isinstance(value, Task):
+                parent = value
+                # Get the only out-port of the parent task
+                outport = next(iter(parent.outputs.values()))
+                parent.edges.append(Edge(outport, inport))
+            elif isinstance(value, Tasklet):
+                parent = value.parent
+                outport = parent.outputs[value.out_slot_in_parent]
+                parent.edges.append(Edge(outport, inport))
             '''
             if not isinstance(value, param_type):
                 if is_coerceable(value, param_type):
@@ -144,12 +132,6 @@ class Task(object):
         else:
             self.outputs[str(0)] = Port(
                 get_type(sig.return_annotation), str(0), self)
-
-    def set_id(self, tid):
-        self.id = tid
-
-    def run(self):
-        return self._runner(**self.args)
 
 
 class TaskGraph(object):
