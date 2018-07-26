@@ -3,10 +3,10 @@ import abc
 from enum import Enum
 
 
-class Result(Enum):
-    CONTINUE,
-    WARN,
-    ERROR
+class PassResult(Enum):
+    CONTINUE = 1,
+    WARN = 2,
+    ERROR = 3
 
 
 class PassContext(object):
@@ -27,3 +27,11 @@ class Pass(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def post_run(self, graph, ctx):
         pass
+
+
+class PassManager(object):
+    passes = []
+
+    @staticmethod
+    def register_pass(p):
+        PassManager.passes.append(p)
