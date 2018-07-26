@@ -1,8 +1,9 @@
-class Context(object):
+class HandlerContext(object):
     def __init__(self, fn):
         self.fn = fn
         self.properties = {'__name__': fn.__name__}
         self.ret = None
+        self.args = None
 
     def get(self, prop):
         if prop in self.properties:
@@ -26,11 +27,16 @@ class Handler(object):
 class HandlerRegistry(object):
     pre_handlers = []
     post_handlers = []
+    init_handlers = []
 
     @staticmethod
-    def register_prehandler(handler):
+    def register_init_handler(handler):
+        HandlerRegistry.init_handlers.append(handler)
+
+    @staticmethod
+    def register_pre_handler(handler):
         HandlerRegistry.pre_handlers.append(handler)
 
     @staticmethod
-    def register_posthandler(handler):
+    def register_post_handler(handler):
         HandlerRegistry.post_handlers.append(handler)

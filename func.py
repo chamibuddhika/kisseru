@@ -33,7 +33,7 @@ Generated python function:
 ---------------------------
 """.format(source)
 
-    logp_info(log, info_str)
+    logp_debug(log, info_str)
 
     with open(".{}.py".format(fn.name), "w") as script:
         script.write(source)
@@ -176,3 +176,4 @@ class ASTOps(Handler):
         fn_ir = parse_fn(fn)
         handle_scripts(fn_ir)
         ctx.fn = recompile(fn_ir, fn)
+        ctx.properties["__scripts__"] = fn_ir.scripts

@@ -126,7 +126,7 @@ Expanded bash script:
 {}
 ---------------------
 """.format(result.script)
-    logp_info(log, info_str)
+    logp_debug(log, info_str)
 
     p = subprocess.Popen(
         result.script,
