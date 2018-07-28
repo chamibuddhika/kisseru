@@ -1,14 +1,15 @@
 import inspect
 import pandas as pd
 
-from utils import get_file_name
-from utils import get_file_ext
+from utils import get_file_name_without_extention
+from utils import get_file_extention
 from passes import Pass
 from passes import PassResult
 from tasks import gen_runner
 from tasks import Tasklet
 from tasks import Task
 from tasks import Edge
+from typed import get_type
 
 
 # [TODO] Make transformations first class and modular. Ideally users should be
@@ -18,7 +19,7 @@ def csv_to_xls(infile):
 
 
 def xls_to_csv(infile):
-    file_name = get_file_name(infile)
+    file_name = get_file_name_without_extention(infile)
     new_file_name = file_name + '.csv'
     df = pd.read_excel(infile)
     df.to_csv(
@@ -48,6 +49,8 @@ class Transform(Pass):
     def run(self, graph, ctx):
         Pass.run(self, graph, ctx)
         new_tasks = []
+        new_sources = []
+        deleted_sources = []
         # Run edge transformations
         for tid, task in graph.tasks.items():
             for index, edge in enumerate(task.edges):
@@ -100,7 +103,7 @@ class Transform(Pass):
                 arg = source._args[name]
 
                 # Check if it looks like a file
-                ext = get_file_ext(arg)
+                ext = get_file_extention(arg)
                 if ext:
                     if ext == 'csv':
                         intype = inport.type.id
@@ -119,20 +122,33 @@ class Transform(Pass):
                             # We know this generated task only has one output
                             outport = task.outputs['0']
 
+                            # Make the configuration of the original task's input to be
+                            # non immediate since now it accepts the output from newly
+                            # generated staging task at runtime
+                            inport.flip_is_immediate()
+
                             # Connect the out port of the new task to the
                             # in port of the old source
                             task.edges.append(Edge(outport, inport))
 
-                            # Make the new task a source
-                            graph.set_source(task)
-                            # Make the original task not be a source anymore
-                            graph.unset_source(source)
+                            # Collect the new task as a source
+                            new_sources.append(task)
+                            # Collect sources which are made not sources anymore
+                            deleted_sources.append(source)
                             # Collect newly generated tasks
                             new_tasks.append(task)
 
         # Add the newly generated tasks to the graph
         for task in new_tasks:
             graph.add_task(task)
+
+        # Mark removed sources as not sources
+        for source in deleted_sources:
+            graph.unset_source(source)
+
+        # Add newly generated sources
+        for source in new_sources:
+            graph.set_source(source)
 
         return PassResult.CONTINUE
 
