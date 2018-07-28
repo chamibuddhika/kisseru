@@ -69,13 +69,21 @@ def get_type(typ):
         return FileType('csv', None)
     elif typ == 'xls':
         return FileType('xls', None)
+    elif typ == 'png':
+        return FileType('png', None)
     elif type == 'any':
         return BuiltinType('void', typ)
+    elif type == 'anyfile':
+        return FileType('unknown', typ)
 
 
 def is_castable(type1, type2):
 
-    cast_map = {'int': ['float'], 'csv': ['xls'], 'xls': ['csv']}
+    cast_map = {
+        'int': ['float', 'any'],
+        'csv': ['xls', 'anyfile'],
+        'xls': ['csv', 'anyfile']
+    }
 
     castables = cast_map.get(type1.id, None)
     can_cast = False
@@ -104,9 +112,19 @@ class TypeCheck(Pass):
                 intype = edge.source.type
                 outtype = edge.dest.type
                 if is_castable(intype, outtype):
+                    # Handle file related types separately
                     if isinstance(intype, FileType) and isinstance(
                             outtype, FileType):
-                        edge.needs_transform = True
+                        # Check if one end of the edge is untype but the other
+                        # is not. If that's the case then we cast the untyped
+                        # end to be the type of the other end. Otherwise we
+                        # mark it as needing a data transformation
+                        if intype.id == 'anyfile' and outtype.id != 'anyfile':
+                            intype.id = outtype.id
+                        elif intype.id != 'anyfile' and outtype.id == 'anyfile':
+                            outtype.id = intype.id
+                        else:
+                            edge.needs_transform = True
                 else:
                     ctx.errors.append(
                         "{} expected a {} got a {} from {}".format(
