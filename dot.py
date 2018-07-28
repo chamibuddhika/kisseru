@@ -50,11 +50,19 @@ class DotGraphGenerator(Pass):
         footer = "}"
         return header + body + footer
 
-    def _dfs(self, node, cur, paths, labels):
+    def _dfs(self, node, cur, paths, visited, labels):
+        if node == None:
+            return
+
         if cur == None:
             cur = []
 
         label = node.name
+
+        if node.id in visited:
+            cur.append(label)
+            paths.append(cur)
+            return
 
         if node.is_source:
             # Update the node's label to mark it as source
@@ -66,6 +74,8 @@ class DotGraphGenerator(Pass):
             # Update the node's label to mark it as generated
             label = label + ":generated"
 
+        visited.add(node.id)
+
         cur.append(node.name)
         labels.add(label)
 
@@ -73,7 +83,7 @@ class DotGraphGenerator(Pass):
         # at left most child
         edge_zero = node.edges[0]
         if not node.is_sink:
-            self._dfs(edge_zero.dest.task_ref, cur, paths, labels)
+            self._dfs(edge_zero.dest.task_ref, cur, paths, visited, labels)
         else:
             paths.append(cur)
             return
@@ -81,13 +91,15 @@ class DotGraphGenerator(Pass):
         # Generate new paths for non left most children
         if len(node.edges) > 1:
             for edge in islice(node.edges, 1, None):
-                self._dfs(edge.dest.task_ref, [node.name], paths, labels)
+                self._dfs(edge.dest.task_ref, [node.name], paths, visited,
+                          labels)
 
     def _generate_dot_graph(self, graph):
         paths = []
+        visited = set()
         labels = set()
         for tid, source in graph.sources.items():
-            self._dfs(source, None, paths, labels)
+            self._dfs(source, None, paths, visited, labels)
         return self._gen_dot_graph(graph, paths, labels)
 
     def run(self, graph, ctx):
