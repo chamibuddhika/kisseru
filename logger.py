@@ -8,9 +8,9 @@ class LoggerEntry(Handler):
 
     def run(self, ctx):
         print(Colors.OKGREEN +
-              "[KISSERU] Running {}".format(ctx.get('__name__')) + Colors.ENDC)
+              "[Runner] Running {}".format(ctx.get('__name__')) + Colors.ENDC)
         print(Colors.OKGREEN +
-              "[KISSERU] {} inputs : ".format(ctx.get('__name__')) +
+              "[Runner] {} inputs : ".format(ctx.get('__name__')) +
               Colors.ENDC + Colors.OKBLUE + Colors.BOLD +
               "{}".format(ctx.args) + Colors.ENDC)
         print(Colors.OKGREEN + "            .             " + Colors.ENDC)
@@ -23,7 +23,7 @@ class LoggerExit(Handler):
 
     def run(self, ctx):
         print(Colors.OKGREEN +
-              "[KISSERU] {} output : ".format(ctx.get('__name__')) +
+              "[Runner] {} output : ".format(ctx.get('__name__')) +
               Colors.ENDC + Colors.OKBLUE + Colors.BOLD +
               "{}".format(ctx.ret) + Colors.ENDC)
         print("========================================")

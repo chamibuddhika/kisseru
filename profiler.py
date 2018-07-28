@@ -59,5 +59,5 @@ class ProfilerExit(Handler):
     def run(self, ctx):
         timer = ctx.get('__timer__')
         timer.stop()
-        print(Colors.OKGREEN + "[KISSERU] {} took {}".format(
+        print(Colors.OKGREEN + "[Runner] {} took {}".format(
             ctx.get('__name__'), timer.elapsed()) + Colors.ENDC)

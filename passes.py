@@ -1,5 +1,6 @@
 import abc
 
+from colors import Colors
 from enum import Enum
 
 
@@ -17,12 +18,16 @@ class PassContext(object):
 
 
 class Pass(metaclass=abc.ABCMeta):
-    def __init__(self, name):
+    def __init__(self, name, tag=""):
         self.name = name
+        self.decription = ""
+        self.tag = tag
 
     @abc.abstractmethod
     def run(self, graph, ctx):
-        pass
+        print(Colors.OKRED + "[Compiler] {}".format(self.description) +
+              " ..." + Colors.ENDC)
+        return PassResult.CONTINUE
 
     @abc.abstractmethod
     def post_run(self, graph, ctx):
