@@ -25,6 +25,14 @@ class Port(object):
     def send(self, value):
         self.task_ref.retrive(self, value)
 
+    def flip_is_immediate(self):
+        if self.is_immediate:
+            self.is_immediate = False
+            self.task_ref._latch += 1
+        else:
+            self.is_immediate = True
+            self.task_ref._latch -= 1
+
     def dump(self):
         print("Port : {} {} {} {}".format(self.type, self.name, self.index,
                                           self.task_ref.name))
@@ -126,24 +134,16 @@ class Task(object):
                 parent = value
                 # Get the only out-port of the parent task
                 outport = next(iter(parent.outputs.values()))
+
                 parent.edges.append(Edge(outport, inport))
                 self._latch += 1
             elif isinstance(value, Tasklet):
                 inport.is_immediate = False
                 parent = value.parent
                 outport = parent.outputs[value.out_slot_in_parent]
+
                 parent.edges.append(Edge(outport, inport))
                 self._latch += 1
-            '''
-            if not isinstance(value, param_type):
-                if is_coerceable(value, param_type):
-                    pass
-                else:
-                    raise Exception(
-                        "Type Error: {} does not match type {}".format(
-                            str(value), str(param_type)))
-                # print("%s : %s" % (str(value), str(param_type)))
-            '''
 
     def _set_outputs(self, fn, args):
         sig = self._sig
@@ -155,7 +155,11 @@ class Task(object):
             ret_type = sig.return_annotation
             type_obj = None
             if ret_type == sig.empty:
-                ret_type = 'any'
+                # [FIXME] Code debt - Currently we have two dyanmic types. One
+                # for builtins and one for files. Here I just assume if we
+                # an untyped return it is a file type. This needs fixing if we
+                # want to return any untyped builtins as well.
+                ret_type = 'anyfile'
                 type_obj = get_type(ret_type)
             elif type(ret_type) == str and ret_type.startswith('@args'):
                 # Get the actual type from the task args input
