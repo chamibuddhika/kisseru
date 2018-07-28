@@ -1,4 +1,6 @@
 from enum import Enum
+from passes import Pass
+from passes import PassResult
 
 
 class TypeRegistry(object):
@@ -21,9 +23,15 @@ class MetaType(Enum):
 
 
 class Type(object):
-    def __init__(self, type_id):
-        self.id = None
-        self.type = None
+    def __init__(self, type_id, typ):
+        self.id = type_id
+        self.type = typ
+
+    def __repr__(self):
+        return "{}".format(self.id)
+
+    def __str__(self):
+        return "{}".format(self.id)
 
 
 class BuiltinType(Type):
@@ -46,22 +54,66 @@ def UserDefinedType(Type):
         self.meta = MetaType.USER_DEF
 
 
+def get_type(typ):
+    if typ == int:
+        return BuiltinType('int', typ)
+    elif typ == str:
+        return BuiltinType('str', typ)
+    elif typ == bool:
+        return BuiltinType('bool', typ)
+    elif typ == dict:
+        return BuiltinType('dict', typ)
+    elif typ == float:
+        return BuiltinType('float', typ)
+    elif typ == 'csv':
+        return FileType('csv', None)
+    elif typ == 'xls':
+        return FileType('xls', None)
+    elif type == 'any':
+        return BuiltinType('void', typ)
+
+
+def is_castable(type1, type2):
+
+    cast_map = {'int': ['float'], 'csv': ['xls'], 'xls': ['csv']}
+
+    castables = cast_map.get(type1.id, None)
+    can_cast = False
+    if castables:
+        for castable in castables:
+            if type2.id == castable:
+                can_cast = True
+                break
+    return can_cast
+
+
 class TypeCheck(Pass):
+    def __init__(self, name):
+        Pass.__init__(self, name)
+        self.description = "Running the type checker"
 
     # [TODO] Type checker should be able to catch argument mismatch errors.
     # We should also be able to do some level of type inferencing at this
     # level. This transformation is also important for implicit data type
     # transformation pass to work.
     def run(self, graph, ctx):
-        pass
+        Pass.run(self, graph, ctx)
+        type_errors_found = False
+        for tid, task in graph.tasks.items():
+            for edge in task.edges:
+                intype = edge.source.type
+                outtype = edge.dest.type
+                if is_castable(intype, outtype):
+                    if isinstance(intype, FileType) and isinstance(
+                            outtype, FileType):
+                        edge.needs_transform = True
+                else:
+                    ctx.errors.append(
+                        "{} expected a {} got a {} from {}".format(
+                            edge.dest.task_ref.name, intype.id, outtype.id,
+                            edge.source.task_ref.name))
+        if type_errors_found:
+            return PassResult.ERROR
 
     def post_run(self, graph, ctx):
         pass
-
-
-def get_type(typ):
-    pass
-
-
-def is_coerceable(val, typ):
-    pass
