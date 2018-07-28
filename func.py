@@ -48,9 +48,12 @@ Generated python function:
             func_code = const
 
     globs = old_func.__globals__.copy()
+    defaults = old_func.__defaults__.copy() if old_func.__defaults__ else None
+    annotations = inspect.signature(old_func)
     globs['run_script'] = run_script
     globs['set_assignments'] = set_assignments
-    new_fn = types.FunctionType(func_code, globs, name=fn.name)
+    new_fn = types.FunctionType(
+        func_code, globs, name=fn.name, argdefs=defaults)
     return new_fn
 
 

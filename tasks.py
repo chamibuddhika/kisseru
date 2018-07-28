@@ -1,11 +1,15 @@
 import inspect
 import uuid
+import traceback
 import logging
 
 from typed import get_type
 from passes import Pass
 from passes import PassResult
 from colors import Colors
+from utils import gen_tuple
+from handler import HandlerContext
+from handler import HandlerRegistry
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +47,7 @@ class Edge(object):
     def __init__(self, source, dest):
         self.source = source
         self.dest = dest
+        self.needs_transform = False
 
     def dump(self):
         self.source.dump()
@@ -50,34 +55,34 @@ class Edge(object):
 
 
 class Tasklet(object):
-    def __init__(self, parent):
+    def __init__(self, parent, index):
         self.parent = parent
-        self.out_slot_in_parent = -1
+        self.out_slot_in_parent = index
 
 
 class Task(object):
-    def __init__(self, runner, ctx, args, kwargs):
+    def __init__(self, runner, fn, sig, args, kwargs):
         self._runner = runner
-        self._ctx = ctx
-        self._fn = ctx.fn
+        self._fn = fn
+        self._sig = sig
         self._args = {}
         self._latch = 0
 
         self.inputs = {}
         self.outputs = {}
         self.edges = []
-        self.name = ctx.fn.__name__
+        self.name = fn.__name__
         self.id = None
         self.is_source = False
         self.is_sink = False
         self.is_staging = False
         self.is_transform = False
 
-        self._set_inputs(ctx.fn, args, kwargs)
-        self._set_outputs(ctx.fn)
+        self._set_inputs(fn, args, kwargs)
+        self._set_outputs(fn, args)
 
     def _set_inputs(self, fn, args, kwargs):
-        sig = inspect.signature(fn)
+        sig = self._sig
         params = sig.parameters
         # print(params)
 
@@ -94,19 +99,21 @@ class Task(object):
         for pname, param in params.items():
             value = arguments[pname]
             py_type = param.annotation
-            if py_type == inspect.Parameter.empty:
-                py_type = type(value)
 
             param_type = None
-            if isinstance(value, Task):
-                parent = value
-                # Get the only out-port of the parent task
-                outport = next(iter(parent.outputs.values()))
-                param_type = outport.type
-            elif isinstance(value, Task):
-                parent = value.parent
-                outport = parent.outputs[value.out_slot_in_parent]
-                param_type = outport.type
+            if py_type == param.empty:
+                if isinstance(value, Task):
+                    parent = value
+                    # Get the only out-port of the parent task
+                    outport = next(iter(parent.outputs.values()))
+                    param_type = outport.type
+                elif isinstance(value, Tasklet):
+                    parent = value.parent
+                    outport = parent.outputs[value.out_slot_in_parent]
+                    param_type = outport.type
+                else:
+                    py_type = type(value)
+                    param_type = get_type(py_type)
             else:
                 param_type = get_type(py_type)
 
@@ -138,15 +145,32 @@ class Task(object):
                 # print("%s : %s" % (str(value), str(param_type)))
             '''
 
-    def _set_outputs(self, fn):
-        sig = inspect.signature(fn)
+    def _set_outputs(self, fn, args):
+        sig = self._sig
         if type(sig.return_annotation) == tuple:
             for index, ret_type in enumerate(sig.return_annotation):
                 self.outputs[str(index)] = Port(
                     get_type(ret_type), str(index), index, self)
         else:
-            self.outputs[str(0)] = Port(
-                get_type(sig.return_annotation), str(0), 0, self)
+            ret_type = sig.return_annotation
+            type_obj = None
+            if ret_type == sig.empty:
+                ret_type = 'any'
+                type_obj = get_type(ret_type)
+            elif type(ret_type) == str and ret_type.startswith('@args'):
+                # Get the actual type from the task args input
+                # arg index follows '@args' prefix. Need to make it zero indexed
+                arg_index = int(ret_type[5]) - 1
+                # arg accessor follows the arg_index
+                arg_accessor = ret_type[7:]
+
+                arg = args[arg_index]
+                ret_type = getattr(arg, arg_accessor)
+                type_obj = get_type(ret_type)
+            else:
+                type_obj = get_type(ret_type)
+
+            self.outputs[str(0)] = Port(type_obj, str(0), 0, self)
 
     def _send(self, ret):
         log.debug("Sending value {} from {}".format(ret, self.name))
@@ -193,7 +217,12 @@ class TaskGraph(object):
         self.tasks[task.id] = task
 
     def set_source(self, task):
+        task.is_source = True
         self.sources[task.id] = task
+
+    def unset_source(self, task):
+        task.is_source = False
+        self.sources.pop(task.id, None)
 
     def dump(self):
         for task in tasks:
@@ -203,8 +232,10 @@ class TaskGraph(object):
 class PreProcess(Pass):
     def __init__(self, name):
         Pass.__init__(self, name)
+        self.description = "Preprocessing the graph"
 
     def run(self, graph, ctx):
+        Pass.run(self, graph, ctx)
         for tid, task in graph.tasks.items():
             # Infer if the task is a source
             is_source = True
@@ -213,7 +244,6 @@ class PreProcess(Pass):
                     is_source = False
                     break
             if is_source:
-                task.is_source = True
                 graph.set_source(task)
 
             # Infer if the task is a sink and generate sink out-ports
@@ -227,3 +257,50 @@ class PreProcess(Pass):
 
     def post_run(self, graph, ctx):
         pass
+
+
+def gen_runner(fn, sig):
+    def run_task(**kwargs):
+        ctx = HandlerContext(fn)
+        ctx.args = kwargs
+        ctx.sig = sig
+
+        log.debug("Running pre handlers")
+        log.debug(HandlerRegistry().pre_handlers)
+        for pre in HandlerRegistry.pre_handlers:
+            pre.run(ctx)
+
+        ret = None
+        try:
+            ret = ctx.fn(**kwargs)
+        except:
+            # [TODO] Ideally we want to match the original line info in the
+            # printed trace back for better script debuggability. We should
+            # probably be able to do that by playing with the exception stack
+            # trace.
+            traceback.print_exc()
+        ctx.ret = ret
+
+        for post in HandlerRegistry.post_handlers:
+            post.run(ctx)
+        return ret
+
+    return run_task
+
+
+def gen_task(fn, sig, args, kwargs):
+    task = Task(gen_runner(fn, sig), fn, sig, args, kwargs)
+    # Check if the task returns multiple values.
+    rets = sig.return_annotation
+    tasklets = []
+    if type(rets) == tuple:
+        # [TODO] Support named out-ports. One way to do that would be to
+        # specify the return annotation as
+        #  ... -> 'return_1:typ_1, ..., return_N:typ_N'
+        for index, ret in enumerate(rets):
+            tasklets.append(Tasklet(task, index))
+    tup = gen_tuple(tasklets)
+    if tup == None:
+        log.error("Task returning more than 10 outputs.")
+        raise Exception("Task returning more than 10 outputs")
+    return (task, tup)

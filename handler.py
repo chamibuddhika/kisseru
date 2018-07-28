@@ -4,6 +4,7 @@ class HandlerContext(object):
         self.properties = {'__name__': fn.__name__}
         self.ret = None
         self.args = None
+        self.sig = None
 
     def get(self, prop):
         if prop in self.properties:
