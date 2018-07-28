@@ -4,6 +4,20 @@ import logging
 ################### String Utilities ######################
 
 
+def get_file_name(infile):
+    if infile != None:
+        tokens = infile.split('.')
+        return ''.join(tokens[:len(tokens) - 1])
+
+
+def get_file_ext(infile):
+    if infile != None and type(infile) == str:
+        tokens = infile.split('.')
+        if len(tokens) > 1:
+            return tokens[-1]
+        return None
+
+
 def gen_spaces(n_spaces):
     spaces = ''
     return ''.join(map(lambda _: ' ', range(n_spaces)))
