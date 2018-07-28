@@ -1,6 +1,7 @@
 class Colors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
+    OKYELLOW = '\033\[93m'
     OKGREEN = '\033[92m'
     OKRED = '\033[91m'
     WARNING = '\033[93m'
