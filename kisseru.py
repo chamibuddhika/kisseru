@@ -29,7 +29,7 @@ png = 'png'
 log = logging.getLogger(__name__)
 
 # Setup kisseru logging
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
 
 # Setup kisseru handlers
 prof_entry = ProfilerEntry("ProfilerEntry")
@@ -106,7 +106,6 @@ def app(**configs):
             func(*args, **kwargs)
             return _graph
 
-        log.info("Return app")
         return wrapper
 
     return decorator
