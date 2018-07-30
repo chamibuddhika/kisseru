@@ -156,7 +156,9 @@ Also note how we refered to the python variable `infile` within the script using
 
 ## How It works
 
-Now let's talk a little bit about how Kisseru works behind the scenes. In our clustering pipeline example `AppRunner` does not run the pipeline straight away when you call `run()` on it. First it will compile the pipeline and validates it to see if user has done any errors like passing incorrectly typed data etc. If it finds any, it will immediately inform the user by throwing a compiler errror. We believe this is better than knowing something went wrong due to a wrongly typed data input once the pipeline has run for a day or two. It could very well happen since python only catches such errors at runtime since it is **dynamically** typed. We like the productivity of python language but with our pre-run compile step we try provide some of the safe guards of a **statically** typed language.
+Now let's talk a little bit about how Kisseru works behind the scenes. In our clustering pipeline example `AppRunner` does not run the pipeline straight away when you call `run()` on it. First it will compile the pipeline and validates it to see if user has done any errors like passing incorrectly typed data etc. If it finds any, it will immediately inform the user by throwing a compiler errror. 
+
+We think failing fast is better than knowing something went wrong due to a wrongly typed data input once the pipeline has run for a day or two. It could very well happen since python only catches such errors at runtime since it is **dynamically** typed. We like the productivity of python language but with our pre-run compile step we try provide some of the safe guards of a **statically** typed language.
 
 As the next step the runner will figure out any data transformations and staging operations it needs to do and then inserts them to the user provided pipeline. In our clustering app the original user defined pipeline looks like this.
 
