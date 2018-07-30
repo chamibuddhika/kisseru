@@ -36,7 +36,7 @@ With Kisseru each of these steps is just a plain python function. Let's pretend
 for a moment that we already have the ftp resource staged. Now we have to
 extract the coordinates from it. We write a function which accepts the locally staged file path as `infile` as follows.
 
-```
+```python
 from kisseru import *
 
 @task()
@@ -52,7 +52,7 @@ Two things to note here.
 
 That's it! You've defined the first Kisseru task. Of course you have to acutally write the code to do the stuff described in the comments. We just elide it for brevity. Now let's define a similar function to extract coordinates from the Excel file.
 
-```
+```python
 @task()
 def extract_coords_from_xls(infile) -> xls:
         # Read the Excel file, extract lattitude and
@@ -64,7 +64,7 @@ Note the return type is now `xls` for a Excel file.
 
 Now what's left to do is to join the temporary file data and run the analysis. Let's join the data files first.
 
-```
+```python
 @task()
 def join(staged, local : csv) -> csv:
         # Concatenate data files and generate a combined 
@@ -81,7 +81,7 @@ in to that whole drinking thing)!
 
 Okay, almost done. We are now done with input data preprocessing. The final step is to actually run the kmeans analysis on the combined data file. Now let's write the `run_kmeans` task which takes in the input file having the combined data and run kmeans analysis on it.
 
-```
+```python
 @task()
 def run_kmeans(infile) -> png:
     # Run kmeans on infile and generate a plot
@@ -90,7 +90,7 @@ def run_kmeans(infile) -> png:
 
 Here we return the plot as a `png` file. Now we have all the steps in the pipeline. All that's left is to stitch it together and run it. Let's do that now.
 
-```
+```python
 @app()
 def cluster_app() -> png:
         ftp_csv = 'ftp://noaa.gov/../hail-2017.csv'
@@ -105,7 +105,7 @@ def cluster_app() -> png:
 
 Two things here. `@app` just says this is a special function which defines a pipeline which is basically a bunch of tasks stitched together with function calls.
 
-And also did we just pass a ftp URL to our `extract_coords_from_csv` which which we earlier presumed to accept a local file??*!#$   
+And also did we just pass a ftp URL to our `extract_coords_from_csv` which which we earlier presumed to accept a local file??#$!
 
 **Yes**, we just did!!! 
 
@@ -115,7 +115,7 @@ That's it! We are done. We have defined the tasks and the pipeline along with it
 
 Okay, now let's run our pipeline.
 
-```
+```python
 if __name__ == "__main__":
   app = AppRunner(cluster_app)
   app.run()
@@ -140,7 +140,7 @@ Let's say you think bash is the second (of course python comes first -- just kid
 
 So what we did was to make it possible to write an inlined bash script or a bash command line within your function just as you would in a regular bash script or at bash prompt. For example let's see how we could have written an inlined bash script within `extract_coords_from_csv` 
 
-```
+```python
 @task()
 def extract_coords_csv(infile) -> csv:
     '''bash
