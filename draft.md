@@ -132,7 +132,7 @@ geo clusters where hail storms happened in two previous years!!
 
 
 
-We are done with our tutorial. But if you are interested in knowing a little bit more about how Kisseru works, also check out the section on [How It Works](#How-It-Works). Meanwhile we have some more goodies for you if you are hooked!
+We are done with our tutorial. But if you are interested in knowing a little bit more about how Kisseru works, also check out the section on [How It Works](#how-it-works). Meanwhile we have some more goodies for you if you are hooked!
 
 ## Scripting Inlined
 
