@@ -32,6 +32,10 @@ The first step is to identify the steps in the pipeline. We identify them as
 4. Now join the data from these two files to get a combined data file.
 5. Finally run the kmeans clustering analysis and generate the cluster plot.
 
+So the pipeline looks like this.
+
+![Alt text](./cluster_pipeline.png)
+
 With Kisseru each of these steps is just a plain python function. Let's pretend
 for a moment that we already have the ftp resource staged. Now we have to
 extract the coordinates from it. We write a function which accepts the locally staged file path as `infile` as follows.
