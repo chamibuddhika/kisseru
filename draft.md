@@ -136,7 +136,7 @@ We are done with our tutorial. But if you are interested in knowing a little bit
 
 ## Scripting Inlined
 
-Let's say you think bash is the second (of course python comes first -- just kidding) greatest scripting language to grace this planet. Hey, we are at a safe place here. No judging what so ever... Cool, so you think you can easily whip up a small bash script to extract the latitude and longitude columns from the csv file in place of bunch of python code in `extract_coords_from_csv`. We hear you...
+Let's say you think bash is the second (of course python comes first -- just kidding) greatest scripting language to grace this planet. Hey, we are at a safe place here. No judging what so ever... Cool! so you think you can easily whip up a small bash script to extract the latitude and longitude columns from the csv file in place of bunch of python code in `extract_coords_from_csv`. We hear you...
 
 So what we did was to make it possible to write an inlined bash script or a bash command line within your function just as you would in a regular bash script or at bash prompt. For example let's see how we could have written an inlined bash script within `extract_coords_from_csv` 
 
