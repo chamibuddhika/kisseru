@@ -282,6 +282,62 @@ class Task(object):
         print("------------")
 
 
+class FusedTask(Task):
+    def __init__(self, tasks):
+        if tasks == None or len(tasks) == 0:
+            raise Exception(
+                "Internal compiler error. Tried fusing an empty task list")
+
+        # If there is only one task nothing to fuse
+        if len(tasks) == 1:
+            return tasks
+
+        self.head = tasks[0]
+        self.tail = tasks[-1]
+
+        # Now transplant edges of the fused tasks with local ports
+        def transplant(edge):
+            source = edge.source
+            if not isinstance(source, LocalPort):
+                source = LocalPort(source.type, source.name, source.index,
+                                   source.task_ref)
+                # Update the task out-port to be a local port
+                source.task_ref.outport[source.name] = source
+                # Update the edge
+                edge.source = source
+
+            dest = edge.dest
+            if not isinstance(dest, LocalPort):
+                dest = LocalPort(dest.type, dest.name, dest.index,
+                                 dest.task_ref)
+                # Update the task in-port to be a local port
+                dest.task_ref.inport[source.name] = dest
+                # Update the edge
+                edge.dest = dest
+            return edge
+
+        # Make all edges of intermediate tasks to contain local ports
+        for task in tasks[:len(tasks - 1)]:
+            task.edges = map(lambda edge: transplant(edge), task.edges)
+
+        # Now assume head task's in-ports
+        self.args = head.args
+        self._latch = head._latch
+        self.triggered = head.triggered
+        self.inputs = head.inputs
+
+        for inport in head.inputs:
+            inport.task_ref = self
+
+        # Also keep a reference to tail task's edges
+        self.edges = tail.edges
+
+    def run(self):
+        # Push the inputs that we accepted on behalf of the head task through
+        # the head task
+        self.head.send(self.head._runner(**self._args))
+
+
 class TaskGraph(object):
     name = None
     tasks = {}
