@@ -1,5 +1,7 @@
 import inspect
 import uuid
+import threading
+import abc
 import traceback
 import logging
 
@@ -14,16 +16,29 @@ from handler import HandlerRegistry
 log = logging.getLogger(__name__)
 
 
-class Port(object):
+class Port(metaclass=abc.ABCMeta):
     def __init__(self, typ, name, index, task):
         self.type = typ
         self.name = name
         self.index = index
         self.task_ref = task
+        self.inport_edge = None
+        self.is_inport = False
+        self.is_one_sided = False
         self.is_immediate = True
 
-    def send(self, value):
-        self.task_ref.retrive(self, value)
+    @abc.abstractmethod
+    def send(self, value, to_port):
+        pass
+
+    @abc.abstractmethod
+    def receive(self, value=None, from_port=None):
+        pass
+
+    def notify_task(self):
+        self.task_ref._latch -= 1
+        with self.task_ref.triggered:
+            self.task_ref.triggered.notify()
 
     def flip_is_immediate(self):
         if self.is_immediate:
@@ -38,11 +53,39 @@ class Port(object):
                                           self.task_ref.name))
 
 
+class LocalPort(Port):
+    def __init__(self, typ, name, index, task):
+        Port.__init__(self, typ, name, index, task)
+        self.is_one_sided = True
+
+    def send(self, value, to_port):
+        to_port.receive(value, self)
+
+    def receive(self, value=None, from_port=None):
+        # This receive was invoked as a callback from the task. Just return
+        if value == None:
+            return self.is_one_sided
+
+        log.debug("Received value {} from task {}".format(
+            value, from_port.task_ref.name))
+
+        self.task_ref._args[self.name] = value
+        # Notify the task that it got a new input
+        self.notify_task()
+        # Invoke the receive on task since we are doing one sided push data-flow
+        # with local ports
+        self.task_ref.receive()
+        return self.is_one_sided
+
+
 class Sink(Port):
     def __init__(self, port):
         Port.__init__(self, port.type, port.name, port.index, port.task_ref)
 
-    def send(self, value):
+    def send(self, value, to_port):
+        pass
+
+    def receive(self, value, from_port):
         print(Colors.OKBLUE +
               "[KISSERU] Pipeline output : {}".format(str(value)) +
               Colors.ENDC)
@@ -55,7 +98,13 @@ class Edge(object):
     def __init__(self, source, dest):
         self.source = source
         self.dest = dest
+        self.send_value = None
         self.needs_transform = False
+
+    def send(self, value):
+        log.debug("Sending value {} to task {}".format(
+            value, self.dest.task_ref.name))
+        self.source.send(value, self.dest)
 
     def dump(self):
         self.source.dump()
@@ -75,6 +124,7 @@ class Task(object):
         self._sig = sig
         self._args = {}
         self._latch = 0
+        self.triggered = threading.Condition()
 
         self.inputs = {}
         self.outputs = {}
@@ -126,7 +176,7 @@ class Task(object):
                 param_type = get_type(py_type)
 
             self._args[pname] = value
-            inport = Port(param_type, pname, -1, self)
+            inport = LocalPort(param_type, pname, -1, self)
             self.inputs[pname] = inport
 
             if isinstance(value, Task):
@@ -135,27 +185,31 @@ class Task(object):
                 # Get the only out-port of the parent task
                 outport = next(iter(parent.outputs.values()))
 
-                parent.edges.append(Edge(outport, inport))
+                edge = Edge(outport, inport)
+                parent.edges.append(edge)
+                inport.inport_edge = edge
                 self._latch += 1
             elif isinstance(value, Tasklet):
                 inport.is_immediate = False
                 parent = value.parent
                 outport = parent.outputs[value.out_slot_in_parent]
 
-                parent.edges.append(Edge(outport, inport))
+                edge = Edge(outport, inport)
+                parent.edges.append(edge)
+                inport.inport_edge = edge
                 self._latch += 1
 
     def _set_outputs(self, fn, args):
         sig = self._sig
         if type(sig.return_annotation) == tuple:
             for index, ret_type in enumerate(sig.return_annotation):
-                self.outputs[str(index)] = Port(
+                self.outputs[str(index)] = LocalPort(
                     get_type(ret_type), str(index), index, self)
         else:
             ret_type = sig.return_annotation
             type_obj = None
             if ret_type == sig.empty:
-                # [FIXME] Code debt - Currently we have two dyanmic types. One
+                # [FIXME] Code debt - Currently we have two dynamic types. One
                 # for builtins and one for files. Here I just assume if we
                 # an untyped return it is a file type. This needs fixing if we
                 # want to return any untyped builtins as well.
@@ -174,29 +228,46 @@ class Task(object):
             else:
                 type_obj = get_type(ret_type)
 
-            self.outputs[str(0)] = Port(type_obj, str(0), 0, self)
+            self.outputs[str(0)] = LocalPort(type_obj, str(0), 0, self)
 
-    def _send(self, ret):
+    def send(self, ret):
         log.debug("Sending value {} from {}".format(ret, self.name))
-        if type(ret) == tuple:
+        # We have multiple out-ports and we need to route return values to the
+        # corresponding out-ports
+        if type(ret) == tuple and type(self._sig.return_annotation) == tuple:
             for edge in self.edges:
-                send_val = ret[edge.source.index]
-                edge.dest.send(send_val)
+                edge.send(ret[edge.source.index])
         else:
             log.debug("Number of edges: {}".format(len(self.edges)))
             for edge in self.edges:
-                edge.dest.send(ret)
+                edge.send(ret)
+
+    def receive(self):
+        is_one_sided_receive = False
+        for name, inport in self.inputs.items():
+            if not inport.is_immediate:
+                # result = inport.receive()
+                # print("{} : {}".format(inport.name, result))
+                is_one_sided_receive |= inport.receive()
+
+        # If communication is one sided i.e: task is not actively waiting for
+        # inputs we shouldn't block this thread since other in-ports needs to
+        # run on this thread and push the rest of the inputs to the task
+        if self._latch and is_one_sided_receive:
+            return
+
+        # Latch is triggered and task run when we get all the inputs
+        # That will be the case if the in-ports are blocking at receive()
+        # or communication is one-sided (in which case we make sure we get to
+        # here only after getting all the inputs as per the conditional above).
+        # If the in-ports are non blocking we wait on the `triggered` monitor
+        while self._latch:
+            with self.triggered:
+                self.triggered.wait()
+        self.run()
 
     def run(self):
-        self._send(self._runner(**self._args))
-
-    def retrive(self, inport, value):
-        self._args[inport.name] = value
-        self._latch -= 1
-
-        # Latch is triggered when we get all the inputs
-        if not self._latch:
-            self.run()
+        self.send(self._runner(**self._args))
 
     def dump(self):
         print("Task : {}".format(self.name))
