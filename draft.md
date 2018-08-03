@@ -32,6 +32,10 @@ The first step is to identify the steps in the pipeline. We identify them as
 4. Now join the data from these two files to get a combined data file.
 5. Finally run the kmeans clustering analysis and generate the cluster plot.
 
+So the pipeline looks like this.
+
+![Alt text](./cluster_pipeline.png)
+
 With Kisseru each of these steps is just a plain python function. Let's pretend
 for a moment that we already have the ftp resource staged. Now we have to
 extract the coordinates from it. We write a function which accepts the locally staged file path as `infile` as follows.
@@ -136,7 +140,7 @@ We are done with our tutorial. But if you are interested in knowing a little bit
 
 ## Scripting Inlined
 
-Let's say you think bash is the second (of course python comes first -- just kidding) greatest scripting language to grace this planet. Hey, we are at a safe place here. No judging what so ever... Cool, so you think you can easily whip up a small bash script to extract the latitude and longitude columns from the csv file in place of bunch of python code in `extract_coords_from_csv`. We hear you...
+Let's say you think bash is the greatest scripting language (behind python -- just kidding) to grace this planet. Cool! So you think you can easily whip up a small bash script to extract the latitude and longitude columns from the csv file in place of bunch of python code in `extract_coords_from_csv`. We hear you...
 
 So what we did was to make it possible to write an inlined bash script or a bash command line within your function just as you would in a regular bash script or at bash prompt. For example let's see how we could have written an inlined bash script within `extract_coords_from_csv` 
 
