@@ -100,6 +100,7 @@ class Edge(object):
         self.dest = dest
         self.send_value = None
         self.needs_transform = False
+        self.dest.inport_edge = self
 
     def send(self, value):
         log.debug("Sending value {} to task {}".format(
@@ -138,6 +139,12 @@ class Task(object):
 
         self._set_inputs(fn, args, kwargs)
         self._set_outputs(fn, args)
+
+    def __repr__(self):
+        return self.name
+
+    def __str__(self):
+        return self.name
 
     def _set_inputs(self, fn, args, kwargs):
         sig = self._sig
@@ -187,7 +194,6 @@ class Task(object):
 
                 edge = Edge(outport, inport)
                 parent.edges.append(edge)
-                inport.inport_edge = edge
                 self._latch += 1
             elif isinstance(value, Tasklet):
                 inport.is_immediate = False
@@ -196,7 +202,6 @@ class Task(object):
 
                 edge = Edge(outport, inport)
                 parent.edges.append(edge)
-                inport.inport_edge = edge
                 self._latch += 1
 
     def _set_outputs(self, fn, args):
@@ -229,6 +234,24 @@ class Task(object):
                 type_obj = get_type(ret_type)
 
             self.outputs[str(0)] = LocalPort(type_obj, str(0), 0, self)
+
+    def get_parents(self):
+        parents = set()
+        for name, inport in self.inputs.items():
+            if not inport.is_immediate and inport.inport_edge != None:
+                if inport.inport_edge.source.task_ref == None:
+                    raise Exception("Null parent for out-port")
+                parents.add(inport.inport_edge.source.task_ref)
+        return list(parents)
+
+    def get_children(self):
+        if self.is_sink:
+            return []
+
+        children = set()
+        for edge in self.edges:
+            children.add(edge.dest.task_ref)
+        return list(children)
 
     def send(self, ret):
         log.debug("Sending value {} from {}".format(ret, self.name))
@@ -292,8 +315,16 @@ class FusedTask(Task):
         if len(tasks) == 1:
             return tasks
 
+        self.name = '__'.join(map(lambda task: task.name, tasks))
+        self.tasks = tasks
         self.head = tasks[0]
         self.tail = tasks[-1]
+
+        # Default initializing other task flags
+        self.is_source = False
+        self.is_sink = False
+        self.is_staging = False
+        self.is_transform = False
 
         # Now transplant edges of the fused tasks with local ports
         def transplant(edge):
@@ -317,20 +348,20 @@ class FusedTask(Task):
             return edge
 
         # Make all edges of intermediate tasks to contain local ports
-        for task in tasks[:len(tasks - 1)]:
-            task.edges = map(lambda edge: transplant(edge), task.edges)
+        for task in tasks[:len(tasks) - 1]:
+            task.edges = list(map(lambda edge: transplant(edge), task.edges))
 
         # Now assume head task's in-ports
-        self.args = head.args
-        self._latch = head._latch
-        self.triggered = head.triggered
-        self.inputs = head.inputs
+        self._args = self.head._args
+        self._latch = self.head._latch
+        self.triggered = self.head.triggered
+        self.inputs = self.head.inputs
 
-        for inport in head.inputs:
+        for name, inport in self.head.inputs.items():
             inport.task_ref = self
 
         # Also keep a reference to tail task's edges
-        self.edges = tail.edges
+        self.edges = self.tail.edges
 
     def run(self):
         # Push the inputs that we accepted on behalf of the head task through

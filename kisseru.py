@@ -20,6 +20,7 @@ from tasks import gen_task
 from tasks import TaskGraph
 from tasks import PreProcess
 from dot import DotGraphGenerator
+from fusion import Fusion
 from colors import Colors
 
 xls = 'xls'
@@ -50,6 +51,7 @@ preprocess = PreProcess("Graph Preprocess")
 type_check = TypeCheck("Type Check")
 transform = Transform("Data Type Transformation")
 stage = Stage("Stage Data")
+fusion = Fusion("Fuse Tasks")
 dot_before = DotGraphGenerator("Dot Graph Generation", "before")
 dot_after = DotGraphGenerator("Dot Graph Generation", "after")
 
@@ -58,6 +60,7 @@ PassManager.register_pass(dot_before)
 PassManager.register_pass(type_check)
 PassManager.register_pass(transform)
 PassManager.register_pass(stage)
+PassManager.register_pass(fusion)
 PassManager.register_pass(dot_after)
 
 params = {'split': None}
