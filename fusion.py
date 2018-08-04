@@ -14,32 +14,15 @@ class Fusion(Pass):
             return
 
         visited.add(node)
-        # print(visited)
         children = node.get_children()
-        #         if node.name == "staging":
-        # print("At staging {}".format(cur_fusables))
-        # print("At staging {}".format(children))
-
-        # if node.name == "extract_coords_gz":
-        # print("At extract_coords_gz {}".format(cur_fusables))
-        # print("At extract_coords_gz {}".format(children))
 
         if len(children) == 1:
             child = children[0]
-            #           if node.name == "staging":
-            # print("At staging {}".format(all_fusables))
-            # print("At staging {}".format(child))
-            # print("At staging {}".format(child.get_parents()))
 
             if len(child.get_parents()) == 1:
                 cur_fusables.append(child)
-                #                 if node.name == "staging":
-                # print(cur_fusables)
                 self._dfs(child, cur_fusables, all_fusables, visited)
                 return
-
-        # if node.name == "run_kmeans":
-        # print("At run_kmeans {}".format(cur_fusables))
 
         all_fusables.append(cur_fusables)
 
@@ -54,11 +37,9 @@ class Fusion(Pass):
         all_fusables = []
         visited = set()
         for name, source in graph.sources.items():
-            # print("Source {}".format(source.name))
             cur_fusables = [source]
             self._dfs(source, cur_fusables, all_fusables, visited)
 
-        print(all_fusables)
         # Filter out single node fusable regions which are redundant
         fusables = [fusable for fusable in all_fusables if len(fusable) > 1]
 
