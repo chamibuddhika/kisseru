@@ -73,8 +73,8 @@ def task(**configs):
         def wrapper(*args, **kwargs):
             # Run task init handlers
             ctx = HandlerContext(func)
-            # We need to save the prototype meta data before we recompile the
-            # function. This is due to the fact that 'compile' loses type
+            # We need to save the signature meta data before we run the
+            # handlers. This is due to the fact that python 'compile' loses type
             # information for some reason. But we want to persist this
             # information through any recompilation which may happen as part of
             # the handlers since we need type information for later graph
