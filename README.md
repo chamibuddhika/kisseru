@@ -175,9 +175,8 @@ Pipeline sources are double bordered and sink is orange colored. However the fin
 ![Alt text](./docs/images/cluster_app-after.png)
 
 
-The tasks in red squares are Kisseru generated tasks for data staging and data transformation. These graphs are actually generated during the pipeline compilation as dot graphs. As another compiler
-optimization we group the sequential task regions in the task graph so that they will be run in the same process. We
-call this optimization task fusion. Here we can see the optimizer fused the graph to three regions. Each region is shown as a grayed out square. As a result of this optimization intermediate results of the fused tasks will not be written disk.
+The tasks in red squares are Kisseru generated tasks for data staging and data transformation. These before and after
+task graphs were generated as during of the compiler pipeline run. As another compiler optimization we group the sequential task regions in the task graph so that they will be run in the same process. We call this optimization task fusion. Here we can see the optimizer fused the graph to three regions. Each region is shown as a grayed out square. As a result of this optimization intermediate results of the fused tasks will not be written disk.
 
 
 Finally, after above pipeline optimization step Kisseru generates code to run the pipeline on the specific back end user wants it run (e.g: on a HPC cluster using Slurm) and then submit the pipeline job to be run. In this example we just ran it locally. For running it on clusters user can provide the required connection data to the AppRunner. Facility for running Kisseru pipelines on clusters is is still in the works.
