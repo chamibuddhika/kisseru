@@ -8,7 +8,7 @@ about it."""
 
 setuptools.setup(
     name="kisseru",
-    version="0.1",
+    version="0.1.1",
     author="Buddhika Chamith",
     author_email="chamibuddhika@gmail.com",
     description="A simply scriptable workflow library for data pipelines.",
@@ -19,7 +19,11 @@ setuptools.setup(
     install_requires=[
         'pandas',
         'xlwt',
+        'xlrd',
         'numpy',
+        'scipy',
+        'matplotlib',
+        'scikit-learn',
     ],
     classifiers=(
         "Programming Language :: Python :: 3",
