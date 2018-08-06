@@ -11,7 +11,7 @@ You can take the pipeline and run it locally in your machine (or in a cluster or
 
 # Example
 
-### A Data Pipeline for Clustering
+## A Data Pipeline for Clustering
 
 Instead of the usual hello world example we are going to show an
 actually useful fully functioning example which demonstrates most of the key
@@ -19,7 +19,30 @@ features of Kisseru. Even though it covers a reasonable breadth it
 is simple enough to fit as an introductory example since we don't have to
 explain lot of fluff to get to the actual use case as many frameworks have to.
 
-The use case is as follows.
+### How to Run
+
+Kisseru requires python 3.5+ and pip3 installation. In order to install Kisseru
+run pip3 as follows.
+
+```pip3 install kisseru```
+
+Now download the Kisseru repository containing the example using git as follows.
+
+```git clone git@github.com:chamibuddhika/kisseru.git```
+
+Example is under `examples/clustering` under the the repository root directory.
+Do the following to run the example.
+
+```bash
+  cd examples/clustering
+  python3 cluster_app.py
+```
+
+Now you should be able see the output from the example run.
+
+### Description
+
+The use case we cover with this example  is as follows.
 * We want to cluster geographic locations where hail storms occurred during previous two years.
 * Data for 2017 is in a ftp site as a csv file while we have the data for 2016
 locally as an Excel file.
