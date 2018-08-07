@@ -19,65 +19,6 @@ features of Kisseru. Even though it covers a reasonable breadth it
 is simple enough to fit as an introductory example since we don't have to
 explain lot of fluff to get to the actual use case as many frameworks have to.
 
-### How to Run
-
-Kisseru requires python 3.5+ and a pip3 installation. In order to install Kisseru
-run pip3 as follows.
-
-```pip3 install kisseru```
-
-Example uses scikit-learn and matplotlib libraries to run kmeans analysis and 
-plot results. 
-
-We have found following to work at a minimum.
-
-```pip3 install numpy scipy scikit-learn matplotlib```
-
-Additionally on Linux we needed to install `python3-tk` library to make 
-matplotlib work. You can use apt-get to install it as follows.
-
-```sudo apt-get install python3-tk```
-
-However if you run in to any issues please refer to 
-[scikit-learn](http://scikit-learn.org/stable/install.html), 
-[matplotlib](https://matplotlib.org/users/installing.html) for more 
-information. 
-
-Once above is complete download the Kisseru repository containing the example 
-using git as follows.
-
-```git clone git@github.com:chamibuddhika/kisseru.git```
-
-Example is under `examples/clustering` under the the repository root directory.
-Do the following to run the example.
-
-```bash
-  cd examples/clustering
-  python3 cluster_app.py
-```
-
-Now you should be able see the output from the example run. Final output plot
-is named `hail.png`. 
-
-If you would like to see the graphical representation of 
-the pipeline before (i.e: user provided) and after (i.e: compiled and run) 
-you need to run the `png.sh` script. It requires the `dot` program to be
-present in order generate the `png` files. Install it as follows.
-
-```
-# On OSX (using homebrew)
-brew install graphviz
-
-# On Linux
-sudo apt-get install graphviz
-```
-
-And now when you run `png.sh` as below and it will generate the `png` files.
-
-```bash
-./png.sh
-```
-
 ### Description
 
 The use case we cover with this example  is as follows.
@@ -197,7 +138,70 @@ geo clusters where hail storms happened in two previous years!!
 
 
 
-We are done with our tutorial. But if you are interested in knowing a little bit more about how Kisseru works, also check out the section on [How It Works](#how-it-works). Meanwhile we have some more goodies for you if you are hooked!
+We are done with our tutorial. See the next section on how to run the example. 
+But if you are interested in knowing a little bit more about how Kisseru works,
+also check out the section on [How It Works](#how-it-works). We also have some 
+more [goodies](#scripting-inlined) for you if you are hooked!
+
+### How to Run
+
+Kisseru requires python 3.5+ and a pip3 installation. In order to install Kisseru
+run pip3 as follows.
+
+```pip3 install kisseru```
+
+Example uses scikit-learn and matplotlib libraries to run kmeans analysis and 
+plot results. 
+
+We have found following to work at a minimum.
+
+```pip3 install numpy scipy scikit-learn matplotlib```
+
+Additionally on Linux we needed to install `python3-tk` library to make 
+matplotlib work. You can use apt-get to install it as follows.
+
+```sudo apt-get install python3-tk```
+
+However if you run in to any issues please refer to 
+[scikit-learn](http://scikit-learn.org/stable/install.html) and 
+[matplotlib](https://matplotlib.org/users/installing.html) for more 
+information. 
+
+Once above is complete, download the Kisseru repository containing the example 
+using git as follows.
+
+```git clone git@github.com:chamibuddhika/kisseru.git```
+
+Example is under `examples/clustering` under the the repository root directory.
+Do the following to run the example.
+
+```bash
+  cd examples/clustering
+  python3 cluster_app.py
+```
+
+Now you should be able see the output from the example run. Final output plot
+is named `hail.png`. 
+
+If you would like to see the graphical representation of 
+the pipeline before (i.e: user provided) and after (i.e: compiled and run) 
+you need to run the `png.sh` script. It requires the `dot` program to be
+present in order generate the `png` files. If not already present install it as
+follows.
+
+```
+# On OSX (using homebrew)
+brew install graphviz
+
+# On Linux
+sudo apt-get install graphviz
+```
+
+And now when you run `png.sh` as below and it will generate the `png` files.
+
+```bash
+./png.sh
+```
 
 ## Scripting Inlined
 
