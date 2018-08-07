@@ -14,7 +14,7 @@ You can take the pipeline and run it locally in your machine (or in a cluster or
    1. [A Data Pipeline for Clustering](#a-data-pipeline-for-clustering)
       1. [Description](#description) 
 	  2. [How to Run](#how-to-run)
-2. [Scriping Inlined](#scripting-inlined)
+2. [Scripting Inlined](#scripting-inlined)
 3. [How It Works](#how-it-works)
 
 # Example
