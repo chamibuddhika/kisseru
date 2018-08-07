@@ -9,6 +9,13 @@ You can take the pipeline and run it locally in your machine (or in a cluster or
 
 (煙管 kiseru) is a Japanese "pipe".  Yes we know we mistyped it a bit with the double `s` :). But we also have KISS (Keep It Simple Stupid) as the defining principle behind this library. So we thought we start the name with that.
 
+# Table of Contents
+1. [Example](#example)
+   1. [A Data Pipeline for Clustering](#a-data-pipeline-for-clustering)
+   2. [How to Run](#how-to-run)
+2. [Scriping Inlined](#scripting-inlined)
+3. [How It Works](#how-it-works)
+
 # Example
 
 ## A Data Pipeline for Clustering
