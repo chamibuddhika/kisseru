@@ -21,7 +21,7 @@ explain lot of fluff to get to the actual use case as many frameworks have to.
 
 ### How to Run
 
-Kisseru requires python 3.5+ and pip3 installation. In order to install Kisseru
+Kisseru requires python 3.5+ and a pip3 installation. In order to install Kisseru
 run pip3 as follows.
 
 ```pip3 install kisseru```
