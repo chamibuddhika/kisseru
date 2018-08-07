@@ -21,9 +21,6 @@ setuptools.setup(
         'xlwt',
         'xlrd',
         'numpy',
-        'scipy',
-        'matplotlib',
-        'scikit-learn',
     ],
     classifiers=(
         "Programming Language :: Python :: 3",
