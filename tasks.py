@@ -8,6 +8,8 @@ import logging
 from typed import get_type
 from passes import Pass
 from passes import PassResult
+from process import ProcessFactory
+from backend import Backend
 from colors import Colors
 from utils import gen_tuple
 from handler import HandlerContext
@@ -51,31 +53,6 @@ class Port(metaclass=abc.ABCMeta):
     def dump(self):
         print("Port : {} {} {} {}".format(self.type, self.name, self.index,
                                           self.task_ref.name))
-
-
-class LocalPort(Port):
-    def __init__(self, typ, name, index, task):
-        Port.__init__(self, typ, name, index, task)
-        self.is_one_sided = True
-
-    def send(self, value, to_port):
-        to_port.receive(value, self)
-
-    def receive(self, value=None, from_port=None):
-        # This receive was invoked as a callback from the task. Just return
-        if value == None:
-            return self.is_one_sided
-
-        log.debug("Received value {} from task {}".format(
-            value, from_port.task_ref.name))
-
-        self.task_ref._args[self.name] = value
-        # Notify the task that it got a new input
-        self.notify_task()
-        # Invoke the receive on task since we are doing one sided push data-flow
-        # with local ports
-        self.task_ref.receive()
-        return self.is_one_sided
 
 
 class Sink(Port):
@@ -183,7 +160,9 @@ class Task(object):
                 param_type = get_type(py_type)
 
             self._args[pname] = value
-            inport = LocalPort(param_type, pname, -1, self)
+            inport = Backend.get_current_backend().get_port(
+                param_type, pname, -1,
+                self)  #LocalPort(param_type, pname, -1, self)
             self.inputs[pname] = inport
 
             if isinstance(value, Task):
@@ -208,8 +187,9 @@ class Task(object):
         sig = self._sig
         if type(sig.return_annotation) == tuple:
             for index, ret_type in enumerate(sig.return_annotation):
-                self.outputs[str(index)] = LocalPort(
-                    get_type(ret_type), str(index), index, self)
+                self.outputs[str(
+                    index)] = Backend.get_current_backend().get_port(
+                        get_type(ret_type), str(index), index, self)
         else:
             ret_type = sig.return_annotation
             type_obj = None
@@ -233,7 +213,8 @@ class Task(object):
             else:
                 type_obj = get_type(ret_type)
 
-            self.outputs[str(0)] = LocalPort(type_obj, str(0), 0, self)
+            self.outputs[str(0)] = Backend.get_current_backend().get_port(
+                type_obj, str(0), 0, self)
 
     def get_parents(self):
         parents = set()
@@ -329,18 +310,21 @@ class FusedTask(Task):
         # Now transplant edges of the fused tasks with local ports
         def transplant(edge):
             source = edge.source
-            if not isinstance(source, LocalPort):
-                source = LocalPort(source.type, source.name, source.index,
-                                   source.task_ref)
+            if not Backend.get_current_backend().name == 'LOCAL_NON_THREADED':
+                source = Backend.get_backend(
+                    BackendConfig(BackendType.LOCAL_NON_THREADED)).get_port(
+                        source.type, source.name, source.index,
+                        source.task_ref)
                 # Update the task out-port to be a local port
                 source.task_ref.outport[source.name] = source
                 # Update the edge
                 edge.source = source
 
             dest = edge.dest
-            if not isinstance(dest, LocalPort):
-                dest = LocalPort(dest.type, dest.name, dest.index,
-                                 dest.task_ref)
+            if not Backend.get_current_backend().name == 'LOCAL_NON_THREADED':
+                dest = Backend.get_backend(
+                    BackendConfig(BackendType.LOCAL_NON_THREADED)).get_port(
+                        dest.type, dest.name, dest.index, dest.task_ref)
                 # Update the task in-port to be a local port
                 dest.task_ref.inport[source.name] = dest
                 # Update the edge

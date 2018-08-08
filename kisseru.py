@@ -19,9 +19,14 @@ from stage import Stage
 from tasks import gen_task
 from tasks import TaskGraph
 from tasks import PreProcess
+from backend import BackendType
+from backend import BackendConfig
+from backend import Backend
 from dot import DotGraphGenerator
 from fusion import Fusion
 from colors import Colors
+from local import LocalNonThreadedBackend
+from local import LocalThreadedBackend
 
 xls = 'xls'
 csv = 'csv'
@@ -115,8 +120,11 @@ def app(**configs):
 
 
 class AppRunner(object):
-    def __init__(self, app):
+    def __init__(self,
+                 app,
+                 config=BackendConfig(BackendType.LOCAL_NON_THREADED)):
         self.app = app
+        self.backend = Backend.get_backend(config)
 
     def run(self):
         # Get the task graph by running the app specification
@@ -153,8 +161,7 @@ class AppRunner(object):
         print("========================================")
         print("")
 
-        for tid, source in graph.sources.items():
-            source.run()
+        self.backend.run(graph)
 
         # Run any post code generation tasks which passes may run for
         # tearing down or saving computed results
