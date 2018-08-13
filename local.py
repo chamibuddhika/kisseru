@@ -1,8 +1,15 @@
 import logging
+try:
+    import cPickle as pickle
+except:
+    import pickle
 
 from tasks import Port
+from tasks import FusedTask
 from backend import Backend
 from process import ProcessFactory
+from logger import TaskLogger
+from logger import MonoChromeLogger
 
 log = logging.getLogger(__name__)
 
@@ -10,7 +17,7 @@ log = logging.getLogger(__name__)
 class LocalPort(Port):
     def __init__(self, typ, name, index, task):
         Port.__init__(self, typ, name, index, task)
-        self.is_one_sided = True
+        self.is_one_sided_receive = True
 
     def send(self, value, to_port):
         to_port.receive(value, self)
@@ -18,7 +25,7 @@ class LocalPort(Port):
     def receive(self, value=None, from_port=None):
         # This receive was invoked as a callback from the task. Just return
         if value == None:
-            return self.is_one_sided
+            return True
 
         log.debug("Received value {} from task {}".format(
             value, from_port.task_ref.name))
@@ -29,39 +36,7 @@ class LocalPort(Port):
         # Invoke the receive on task since we are doing one sided push data-flow
         # with local ports
         self.task_ref.receive()
-        return self.is_one_sided
-
-
-class LocalThreadedPort(LocalPort):
-    def __init__(self, typ, name, index, task):
-        Port.__init__(self, typ, name, index, task)
-        self.is_one_sided = True
-
-    def send(self, value, to_port):
-        def threaded_receive(from_port, value, to_port):
-            to_port.receive(value, to_port)
-
-        ProcessFactory.create_process(threaded_receive, (self, value, to_port))
-
-
-@Backend.register_backend
-class LocalThreadedBackend(Backend):
-    name = "LOCAL"
-
-    def __init__(self, backend_config):
-        Backend.__init__(self, backend_config)
-
-    def get_port(self, typ, name, index, task):
-        return LocalThreadedPort(typ, name, index, task)
-
-    def package(self):
-        pass
-
-    def deploy(self):
-        pass
-
-    def run(self):
-        pass
+        return True
 
 
 @Backend.register_backend
@@ -70,6 +45,7 @@ class LocalNonThreadedBackend(Backend):
 
     def __init__(self, backend_config):
         Backend.__init__(self, backend_config)
+        self.logger = TaskLogger('app.log')
 
     def get_port(self, typ, name, index, task):
         return LocalPort(typ, name, index, task)
@@ -80,6 +56,86 @@ class LocalNonThreadedBackend(Backend):
     def deploy(self):
         pass
 
-    def run(self, graph):
+    def run_task(self, task):
+        task.run()
+
+    def run_flow(self, graph):
         for tid, source in graph.sources.items():
             source.run()
+
+
+'''
+class LocalThreadedPort(Port):
+    def __init__(self, typ, name, index, task):
+        Port.__init__(self, typ, name, index, task)
+        self.is_one_sided_receive = False
+
+    def send(self, value, to_port):
+        filename = "{}_{}".format(to_port.task_ref.id, to_port.name)
+        fp = open(filename, 'wb')
+        pickle.dump(value, fp)
+        fp.close()
+
+        to_port.receive(filename, self)
+
+    def receive(self, value=None, from_port=None):
+        if value == None:
+            # This receive was invoked as a callback from the task. Just return
+            filename = "{}_{}".format(self.task_ref.id, self.name)
+            if os.path.isfile(filename):
+                fp = open(filename, 'rb')
+                value = pickle.load(fp)
+                fp.close()
+
+                self.task_ref._args[self.name] = value
+                return True
+
+        self.task_ref.receive()
+
+@Backend.register_backend
+class LocalThreadedBackend(Backend):
+    name = "LOCAL"
+
+    def __init__(self, backend_config):
+        Backend.__init__(self, backend_config)
+        self.logger = TaskLogger('app.log')
+
+    def get_port(self, typ, name, index, task):
+        return LocalPort(typ, name, index, task)
+
+    def package(self):
+        pass
+
+    def deploy(self):
+        pass
+
+    def run_task(self, task):
+        def threaded_task(task):
+            if isinstance(task, FusedTask):
+                print("At fused task {}".format(task.name))
+            else:
+                print("At unfused task {}".format(task.name))
+            task.run()
+            print("Waiting at {}".format(task.name))
+            ProcessFactory.wait()
+
+        if not task.is_fusee:
+            print("Running fused {}".format(task.name))
+            ProcessFactory.create_process(threaded_task, (task, ))
+        else:
+            print("Running fusee {}".format(task.name))
+            task.run()
+
+    def run_flow(self, graph):
+        print("Barrier count {}".format(graph.get_num_tasks() + 1))
+        ProcessFactory.set_barrier(graph.get_num_tasks() + 1)
+
+        for tid, task in graph.tasks.items():
+            print("Task : {} Fusee : {}".format(task.name, task.is_fusee))
+
+        for tid, source in graph.sources.items():
+            self.run_task(source)
+
+        print("Waiting at main thread..")
+        ProcessFactory.wait()
+'''

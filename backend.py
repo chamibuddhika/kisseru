@@ -34,7 +34,11 @@ class Backend(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def run(self):
+    def run_task(self, task):
+        pass
+
+    @abc.abstractmethod
+    def run_flow(self, graph):
         pass
 
     @classmethod

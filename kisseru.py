@@ -5,8 +5,8 @@ import inspect
 
 from handler import HandlerContext
 from handler import HandlerRegistry
-from logger import LoggerEntry
-from logger import LoggerExit
+from tracer import TraceEntry
+from tracer import TraceExit
 from func import ASTOps
 from profiler import ProfilerEntry
 from profiler import ProfilerExit
@@ -40,8 +40,8 @@ log = logging.getLogger(__name__)
 # Setup kisseru handlers
 prof_entry = ProfilerEntry("ProfilerEntry")
 prof_exit = ProfilerExit("ProfilerExit")
-logger_entry = LoggerEntry("LoggerEntry")
-logger_exit = LoggerExit("LoggerExit")
+logger_entry = TraceEntry("TraceEntry")
+logger_exit = TraceExit("TraceExit")
 ast_ops = ASTOps("ASTOps")
 
 HandlerRegistry.register_init_handler(ast_ops)
@@ -161,7 +161,7 @@ class AppRunner(object):
         print("========================================")
         print("")
 
-        self.backend.run(graph)
+        self.backend.run_flow(graph)
 
         # Run any post code generation tasks which passes may run for
         # tearing down or saving computed results

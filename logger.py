@@ -1,30 +1,41 @@
+from enum import Enum
+
 from colors import Colors
 from handler import Handler
 
 
-class LoggerEntry(Handler):
-    def __init__(self, name):
-        Handler.__init__(self, name)
-
-    def run(self, ctx):
-        print(Colors.OKGREEN +
-              "[Runner] Running {}".format(ctx.get('__name__')) + Colors.ENDC)
-        print(Colors.OKGREEN +
-              "[Runner] {} inputs : ".format(ctx.get('__name__')) +
-              Colors.ENDC + Colors.OKBLUE + Colors.BOLD +
-              "{}".format(ctx.args) + Colors.ENDC)
-        print(Colors.OKGREEN + "            .             " + Colors.ENDC)
-        print(Colors.OKGREEN + "            .             " + Colors.ENDC)
+class LogColor(Enum):
+    GREEN = 0
+    YELLOW = 1
+    RED = 2
+    BLUE = 3
 
 
-class LoggerExit(Handler):
-    def __init__(self, name):
-        Handler.__init__(self, name)
+class TaskLogger(object):
+    def __init__(self, logfile):
+        self.fp = open(logfile, "a")
 
-    def run(self, ctx):
-        print(Colors.OKGREEN +
-              "[Runner] {} output : ".format(ctx.get('__name__')) +
-              Colors.ENDC + Colors.OKBLUE + Colors.BOLD +
-              "{}".format(ctx.ret) + Colors.ENDC)
-        print("========================================")
-        print("                  \/                    \n")
+    def log(self, log_str):
+        # Write to stdout
+        print(log_str)
+        # Write to log file
+        self.fp.write(log_str)
+
+    def fmt(self, log_str, color):
+        if color == LogColor.GREEN:
+            return Colors.OKGREEN + log_str + Colors.ENDC
+        elif color == LogColor.YELLOW:
+            return Colors.OKYELLOW + log_str + Colors.ENDC
+        elif color == LogColor.RED:
+            return Colors.OKRED + log_str + Colors.ENDC
+        elif color == LogColor.BLUE:
+            return Colors.OKBLUE + log_str + Colors.ENDC
+        return log_str
+
+
+class MonoChromeLogger(TaskLogger):
+    def __init__(self, logfile):
+        TaskLogger.__init__(self, logfile)
+
+    def fmt(self, log_str, color):
+        return log_str

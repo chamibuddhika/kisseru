@@ -2,6 +2,8 @@ import time
 
 from colors import Colors
 from handler import Handler
+from logger import LogColor
+from backend import Backend
 
 
 class Timer:
@@ -59,5 +61,14 @@ class ProfilerExit(Handler):
     def run(self, ctx):
         timer = ctx.get('__timer__')
         timer.stop()
+
+        logger = Backend.get_current_backend().logger
+
+        log_str = logger.fmt(
+            "[Runner] {} took {}".format(ctx.get('__name__'), timer.elapsed()),
+            LogColor.GREEN)
+        logger.log(log_str)
+        '''
         print(Colors.OKGREEN + "[Runner] {} took {}".format(
             ctx.get('__name__'), timer.elapsed()) + Colors.ENDC)
+        '''
