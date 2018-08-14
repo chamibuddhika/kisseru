@@ -5,6 +5,9 @@ import abc
 import traceback
 import logging
 
+from multiprocessing import Value
+from multiprocessing import Condition
+
 from typed import get_type
 from passes import Pass
 from passes import PassResult
@@ -40,17 +43,24 @@ class Port(metaclass=abc.ABCMeta):
         pass
 
     def notify_task(self):
-        self.task_ref._latch -= 1
+        with self.task_ref._latch.get_lock():
+            self.task_ref._latch.value -= 1
         with self.task_ref.triggered:
             self.task_ref.triggered.notify()
 
     def flip_is_immediate(self):
         if self.is_immediate:
             self.is_immediate = False
-            self.task_ref._latch += 1
+            # Unsynchronized access since we know that this method will be
+            # called within a single threaded environment at task graph
+            # generation
+            self.task_ref._latch.value += 1
         else:
             self.is_immediate = True
-            self.task_ref._latch -= 1
+            # Unsynchronized access since we know that this method will be
+            # called within a single threaded environment at task graph
+            # generation
+            self.task_ref._latch.value -= 1
 
     def dump(self):
         print("Port : {} {} {} {}".format(self.type, self.name, self.index,
@@ -103,14 +113,15 @@ class Task(object):
         self._fn = fn
         self._sig = sig
         self._args = {}
-        self._latch = 0
-        self.triggered = threading.Condition()
+        self._latch = Value('i', 0)
+        self.triggered = Condition()
 
         self.inputs = {}
         self.outputs = {}
         self.edges = []
         self.name = fn.__name__
         self.id = None
+        self.graph = None
 
         self.is_fusee = False
         self.is_source = False
@@ -177,7 +188,9 @@ class Task(object):
 
                 edge = Edge(outport, inport)
                 parent.edges.append(edge)
-                self._latch += 1
+                # Unsynchronized access here since we know graph generation is
+                # single threaded
+                self._latch.value += 1
             elif isinstance(value, Tasklet):
                 inport.is_immediate = False
                 parent = value.parent
@@ -185,7 +198,9 @@ class Task(object):
 
                 edge = Edge(outport, inport)
                 parent.edges.append(edge)
-                self._latch += 1
+                # Unsynchronized access here since we know graph generation is
+                # single threaded
+                self._latch.value += 1
 
     def _set_outputs(self, fn, args):
         sig = self._sig
@@ -256,13 +271,13 @@ class Task(object):
             if not inport.is_immediate:
                 # result = inport.receive()
                 # print("{} : {}".format(inport.name, result))
-                inport.receive()
                 is_one_sided_receive |= inport.is_one_sided_receive
+                inport.receive()
 
         # If communication is one sided i.e: task is not actively waiting for
         # inputs we shouldn't block this thread since other in-ports needs to
         # run on this thread and push the rest of the inputs to the task
-        if self._latch and is_one_sided_receive:
+        if self._latch.value and is_one_sided_receive:
             return
 
         # Latch is triggered and task run when we get all the inputs
@@ -270,7 +285,7 @@ class Task(object):
         # or communication is one-sided (in which case we make sure we get to
         # here only after getting all the inputs as per the conditional above).
         # If the in-ports are non blocking we wait on the `triggered` monitor
-        while self._latch:
+        while self._latch.value:
             with self.triggered:
                 self.triggered.wait()
 
@@ -292,6 +307,7 @@ class Task(object):
         print("------------")
 
 
+# Notes : ports take care of inter task communication
 class FusedTask(Task):
     def __init__(self, tasks):
         if tasks == None or len(tasks) == 0:
@@ -344,7 +360,12 @@ class FusedTask(Task):
 
         # Make all edges of intermediate tasks to contain local ports
         for task in tasks[:len(tasks) - 1]:
+            print("Task : {}".format(task.name))
             task.edges = list(map(lambda edge: transplant(edge), task.edges))
+            for edge in task.edges:
+                print("Edge {} -> {}".format(
+                    type(edge.source).__name__,
+                    type(edge.dest).__name__))
 
         # Now assume head task's in-ports
         self._args = self.head._args
@@ -368,10 +389,17 @@ class TaskGraph(object):
     name = None
     tasks = {}
     sources = {}
+    num_tasks = 0
+    completed_tasks = Value('i', 0)
+    done = Condition()
 
     def add_task(self, task):
         task.id = uuid.uuid1()
         self.tasks[task.id] = task
+        task.graph = self
+
+    def get_task(self, tid):
+        return self.tasks[tid]
 
     def set_source(self, task):
         task.is_source = True
@@ -386,17 +414,18 @@ class TaskGraph(object):
             task.dump()
 
     def get_num_tasks(self):
-        count = 0
-        tasks = set()
-        for tid, task in self.tasks.items():
-            tasks.add(task)
+        return self.num_tasks
+        # count = 0
+        # tasks = set()
+        # for tid, task in self.tasks.items():
+        # tasks.add(task)
 
-        # Now remove any tasks within fused tasks
-        for tid, task in self.tasks.items():
-            if isinstance(task, FusedTask):
-                for t in task.tasks:
-                    tasks.remove(t)
-        return len(tasks)
+        # # Now remove any tasks within fused tasks
+        # for tid, task in self.tasks.items():
+        # if isinstance(task, FusedTask):
+        # for t in task.tasks:
+        # tasks.remove(t)
+        # return len(tasks)
 
 
 class PreProcess(Pass):
@@ -421,9 +450,58 @@ class PreProcess(Pass):
                 task.is_sink = True
                 # If there no out edges it means this is a sink and all outputs
                 # are sinks. Make them so...
+                current_backend = Backend.get_current_backend()
                 for name, outport in task.outputs.items():
-                    task.edges.append(Edge(outport, Sink(outport)))
+                    # If current out port is not a local port make it so
+                    if not current_backend.name == 'LOCAL_NON_THREADED':
+                        outport = Backend.get_backend(
+                            BackendConfig(
+                                BackendType.LOCAL_NON_THREADED)).get_port(
+                                    outport.type, outport.name, outport.index,
+                                    outport.task_ref)
+                        task.edges.append(Edge(outport, Sink(outport)))
         return PassResult.CONTINUE
+
+    def post_run(self, graph, ctx):
+        pass
+
+
+class PostProcess(Pass):
+    def __init__(self, name):
+        Pass.__init__(self, name)
+        self.description = "Post processing the graph"
+
+    def run(self, graph, ctx):
+        Pass.run(self, graph, ctx)
+
+        count = 0
+        tasks = set()
+        for tid, task in graph.tasks.items():
+            tasks.add(task)
+
+        # Now remove any tasks within fused tasks
+        for tid, task in graph.tasks.items():
+            if isinstance(task, FusedTask):
+                for t in task.tasks:
+                    tasks.remove(t)
+        '''
+        for tid, task in graph.tasks.items():
+            if isinstance(task, FusedTask):
+                print("Fused task : {}".format(task.name))
+                for t in task.tasks:
+                    print("Task : {}".format(t.name))
+                    for e in task.edges:
+                        s = e.source
+                        d = e.dest
+                        print("Edge : source ({}) -> dest ({})".format(
+                            type(s).__name__,
+                            type(d).__name__))
+                    print("--")
+                print("")
+                print("")
+        '''
+
+        graph.num_tasks = len(tasks)
 
     def post_run(self, graph, ctx):
         pass

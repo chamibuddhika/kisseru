@@ -48,14 +48,18 @@ class Backend(metaclass=abc.ABCMeta):
     @classmethod
     def get_backend(cls, backend_config):
         backend_type = backend_config.backend_type
+        backend = None
         if backend_type == BackendType.LOCAL_NON_THREADED:
-            cls.cur_backend = cls.backends['LOCAL_NON_THREADED'](
-                backend_config)
+            backend = cls.backends['LOCAL_NON_THREADED'](backend_config)
         elif backend_type == BackendType.LOCAL:
-            cls.cur_backend = cls.backends['LOCAL'](backend_config)
+            backend = cls.backends['LOCAL'](backend_config)
         elif backend_type == BackendType.SLURM:
             raise Exception("Slurm backend not implemented yet.")
-        return cls.cur_backend
+        return backend
+
+    @classmethod
+    def set_current_backend(cls, backend_config):
+        cls.cur_backend = cls.get_backend(backend_config)
 
     @classmethod
     def get_current_backend(cls):

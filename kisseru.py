@@ -19,6 +19,7 @@ from stage import Stage
 from tasks import gen_task
 from tasks import TaskGraph
 from tasks import PreProcess
+from tasks import PostProcess
 from backend import BackendType
 from backend import BackendConfig
 from backend import Backend
@@ -59,6 +60,7 @@ stage = Stage("Stage Data")
 fusion = Fusion("Fuse Tasks")
 dot_before = DotGraphGenerator("Dot Graph Generation", "before")
 dot_after = DotGraphGenerator("Dot Graph Generation", "after")
+postprocess = PostProcess("Graph Postprocess")
 
 PassManager.register_pass(preprocess)
 PassManager.register_pass(dot_before)
@@ -66,7 +68,8 @@ PassManager.register_pass(type_check)
 PassManager.register_pass(transform)
 PassManager.register_pass(stage)
 PassManager.register_pass(fusion)
-PassManager.register_pass(dot_after)
+# PassManager.register_pass(dot_after)
+PassManager.register_pass(postprocess)
 
 params = {'split': None}
 _graph = TaskGraph()
@@ -120,11 +123,10 @@ def app(**configs):
 
 
 class AppRunner(object):
-    def __init__(self,
-                 app,
-                 config=BackendConfig(BackendType.LOCAL_NON_THREADED)):
+    def __init__(self, app, config=BackendConfig(BackendType.LOCAL)):
         self.app = app
-        self.backend = Backend.get_backend(config)
+        Backend.set_current_backend(config)
+        self.backend = Backend.get_current_backend()
 
     def run(self):
         # Get the task graph by running the app specification
@@ -161,9 +163,9 @@ class AppRunner(object):
         print("========================================")
         print("")
 
-        self.backend.run_flow(graph)
-
         # Run any post code generation tasks which passes may run for
         # tearing down or saving computed results
         for p in PassManager.passes:
             res = p.post_run(graph, ctx)
+
+        self.backend.run_flow(graph)
