@@ -68,7 +68,7 @@ PassManager.register_pass(type_check)
 PassManager.register_pass(transform)
 PassManager.register_pass(stage)
 PassManager.register_pass(fusion)
-# PassManager.register_pass(dot_after)
+PassManager.register_pass(dot_after)
 PassManager.register_pass(postprocess)
 
 params = {'split': None}
