@@ -167,8 +167,8 @@ class DotGraphGenerator(Pass):
     def _traverse(self, node, cur, paths, visited, labels):
         # Handle the first edge separately since we continue the top down path
         # at left most child
-        edge_zero = node.edges[0]
         if not node.is_sink:
+            edge_zero = node.edges[0]
             self._dfs(edge_zero.dest.task_ref, cur, paths, visited, labels)
         else:
             paths.append(cur)

@@ -1,5 +1,6 @@
 import logging
 import os
+import platform
 try:
     import cPickle as pickle
 except:
@@ -10,7 +11,9 @@ from tasks import FusedTask
 from backend import Backend
 from process import ProcessFactory
 from logger import TaskLogger
+from logger import ThreadLocalLogger
 from logger import MonoChromeLogger
+from logger import LogColor
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +81,7 @@ class LocalNonThreadedBackend(Backend):
 
     def __init__(self, backend_config):
         Backend.__init__(self, backend_config)
-        self.logger = TaskLogger('app.log')
+        self.logger = None
 
     def get_port(self, typ, name, index, task):
         return LocalPort(typ, name, index, task)
@@ -93,8 +96,10 @@ class LocalNonThreadedBackend(Backend):
         task.run()
 
     def run_flow(self, graph):
+        self.logger = TaskLogger("{}.log".format(graph.name))
         for tid, source in graph.sources.items():
             source.run()
+        self.logger.flush()
 
 
 @Backend.register_backend
@@ -103,7 +108,13 @@ class LocalThreadedBackend(Backend):
 
     def __init__(self, backend_config):
         Backend.__init__(self, backend_config)
-        self.logger = TaskLogger('app.log')
+        self.logger = None
+
+        # [NOTE] We have to disable proxies to get some libraries working
+        # (e.g: urllib, scikitlearn) with multiprocessing
+        # due to https://bugs.python.org/issue30385 in OS X
+        if platform.system().startswith("Darwin"):
+            os.environ["no_proxy"] = "*"
 
     def get_port(self, typ, name, index, task):
         return LocalThreadedPort(typ, name, index, task)
@@ -116,34 +127,32 @@ class LocalThreadedBackend(Backend):
 
     def run_task(self, task):
         def threaded_task(task):
-            if isinstance(task, FusedTask):
-                print("At fused task {}".format(task.name))
-            else:
-                print("At unfused task {}".format(task.name))
             task.run()
-
-            with task.graph.completed_tasks.get_lock():
-                task.graph.completed_tasks.value += 1
-
-            if task.graph.completed_tasks.value == task.graph.get_num_tasks():
-                with task.graph.done:
-                    print("Notifying the main thread..")
-                    task.graph.done.notify()
+            # Flush the thread local log in case task.run() did not result in
+            # spawning a new thread (process).
+            self.logger.flush()
 
         if not task.is_fusee:
-            print("Running fused {}".format(task.name))
+            # We are about to spawn a new task. Flush the logs that we
+            # accumulated for this thread before spawning the new thread
+            if self.logger:
+                self.logger.flush()
+            self.logger = ThreadLocalLogger(task.name + '.log')
+
+            # [NOTE] We have to disable proxies to get some libraries working
+            # (e.g: urllib, scikitlearn) with multiprocessing
+            # due to https://bugs.python.org/issue30385 in OS X
+            if platform.system().startswith("Darwin"):
+                os.environ["no_proxy"] = "*"
+
             ProcessFactory.create_process(threaded_task, (task, ))
         else:
-            print("Running fusee {}".format(task.name))
             task.run()
 
     def run_flow(self, graph):
-        print("Barrier count {}".format(graph.get_num_tasks() + 1))
-
         for tid, source in graph.sources.items():
             self.run_task(source)
 
         while graph.completed_tasks.value != graph.get_num_tasks():
-            print("Waiting at main thread..")
             with graph.done:
                 graph.done.wait()

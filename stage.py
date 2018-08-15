@@ -1,10 +1,9 @@
+import os
 import inspect
 import urllib.request
 import shutil
 import time
 import socket
-
-from contextlib import closing
 
 from colors import Colors
 from tasks import gen_runner
@@ -18,17 +17,16 @@ from utils import get_path_to_file
 
 
 def staging(infile):
-    urllib.getproxies = lambda x=None: {}
 
     filename = get_file_name(infile)
     path = get_path_to_file(infile)
     response = None
-    print("Trying to read from URL : {}".format(infile))
+
     try:
         response = urllib.request.urlopen(infile)
     except e:
         print(e.reason)
-    print("Done reading from URL : {}".format(infile))
+
     content = response.read()
     with open("{}".format(filename), "wb") as data:
         data.write(content)

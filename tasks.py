@@ -8,6 +8,7 @@ import logging
 from multiprocessing import Value
 from multiprocessing import Condition
 
+from logger import LogColor
 from typed import get_type
 from passes import Pass
 from passes import PassResult
@@ -75,9 +76,10 @@ class Sink(Port):
         pass
 
     def receive(self, value, from_port):
-        print(Colors.OKBLUE +
-              "[KISSERU] Pipeline output : {}".format(str(value)) +
-              Colors.ENDC)
+        logger = Backend.get_current_backend().logger
+        log_str = logger.fmt(
+            "[KISSERU] Pipeline output : {}".format(str(value)), LogColor.BLUE)
+        logger.log(log_str)
 
     def dump(self):
         Port.dump(self)
@@ -293,6 +295,7 @@ class Task(object):
 
     def run(self):
         self.send(self._runner(**self._args))
+        self.graph.mark_completed(self.id)
 
     def dump(self):
         print("Task : {}".format(self.name))
@@ -339,9 +342,10 @@ class FusedTask(Task):
             current_backend = Backend.get_current_backend()
             if not current_backend.name == 'LOCAL_NON_THREADED':
                 source = Backend.get_backend(
-                    BackendConfig(BackendType.LOCAL_NON_THREADED)).get_port(
-                        source.type, source.name, source.index,
-                        source.task_ref)
+                    BackendConfig(BackendType.LOCAL_NON_THREADED,
+                                  'Local Non Threaded')).get_port(
+                                      source.type, source.name, source.index,
+                                      source.task_ref)
                 # Update the task out-port to be a local port
                 source.task_ref.outputs[source.name] = source
                 # Update the edge
@@ -350,8 +354,10 @@ class FusedTask(Task):
             dest = edge.dest
             if not current_backend.name == 'LOCAL_NON_THREADED':
                 dest = Backend.get_backend(
-                    BackendConfig(BackendType.LOCAL_NON_THREADED)).get_port(
-                        dest.type, dest.name, dest.index, dest.task_ref)
+                    BackendConfig(BackendType.LOCAL_NON_THREADED,
+                                  'Local Non Threaded')).get_port(
+                                      dest.type, dest.name, dest.index,
+                                      dest.task_ref)
                 # Update the task in-port to be a local port
                 dest.task_ref.inputs[source.name] = dest
                 # Update the edge
@@ -360,12 +366,7 @@ class FusedTask(Task):
 
         # Make all edges of intermediate tasks to contain local ports
         for task in tasks[:len(tasks) - 1]:
-            print("Task : {}".format(task.name))
             task.edges = list(map(lambda edge: transplant(edge), task.edges))
-            for edge in task.edges:
-                print("Edge {} -> {}".format(
-                    type(edge.source).__name__,
-                    type(edge.dest).__name__))
 
         # Now assume head task's in-ports
         self._args = self.head._args
@@ -390,8 +391,18 @@ class TaskGraph(object):
     tasks = {}
     sources = {}
     num_tasks = 0
+
+    # Runtime controls for task graph execution
     completed_tasks = Value('i', 0)
     done = Condition()
+
+    def mark_completed(self, tid):
+        with self.completed_tasks.get_lock():
+            self.completed_tasks.value += 1
+
+        if self.completed_tasks.value == self.get_num_tasks():
+            with self.done:
+                self.done.notify()
 
     def add_task(self, task):
         task.id = uuid.uuid1()
@@ -455,10 +466,10 @@ class PreProcess(Pass):
                     # If current out port is not a local port make it so
                     if not current_backend.name == 'LOCAL_NON_THREADED':
                         outport = Backend.get_backend(
-                            BackendConfig(
-                                BackendType.LOCAL_NON_THREADED)).get_port(
-                                    outport.type, outport.name, outport.index,
-                                    outport.task_ref)
+                            BackendConfig(BackendType.LOCAL_NON_THREADED,
+                                          'Local Non Threaded')).get_port(
+                                              outport.type, outport.name,
+                                              outport.index, outport.task_ref)
                         task.edges.append(Edge(outport, Sink(outport)))
         return PassResult.CONTINUE
 
@@ -484,22 +495,6 @@ class PostProcess(Pass):
             if isinstance(task, FusedTask):
                 for t in task.tasks:
                     tasks.remove(t)
-        '''
-        for tid, task in graph.tasks.items():
-            if isinstance(task, FusedTask):
-                print("Fused task : {}".format(task.name))
-                for t in task.tasks:
-                    print("Task : {}".format(t.name))
-                    for e in task.edges:
-                        s = e.source
-                        d = e.dest
-                        print("Edge : source ({}) -> dest ({})".format(
-                            type(s).__name__,
-                            type(d).__name__))
-                    print("--")
-                print("")
-                print("")
-        '''
 
         graph.num_tasks = len(tasks)
 

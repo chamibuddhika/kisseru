@@ -10,8 +10,9 @@ class BackendType(Enum):
 
 
 class BackendConfig(object):
-    def __init__(self, backend_type):
+    def __init__(self, backend_type, name):
         self.backend_type = backend_type
+        self.name = name
 
 
 class Backend(metaclass=abc.ABCMeta):
@@ -19,7 +20,9 @@ class Backend(metaclass=abc.ABCMeta):
     cur_backend = None
 
     def __init__(self, backend_config):
-        self.backend = backend_config
+        self.config = backend_config
+        self.name = backend_config.name
+        self.logger = None
 
     @abc.abstractmethod
     def get_port(self, typ, name, index, task):

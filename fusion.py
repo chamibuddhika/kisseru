@@ -46,16 +46,6 @@ class Fusion(Pass):
         fused_tasks = list(map(lambda fusable: FusedTask(fusable), fusables))
 
         for fused_task in fused_tasks:
-            print("Before")
-            for t in fused_task.tasks:
-                print("Task : {}".format(t.name))
-                for e in t.edges:
-                    s = e.source
-                    d = e.dest
-                    print("Edge : source ({}) -> dest ({})".format(
-                        type(s).__name__,
-                        type(d).__name__))
-
             graph.add_task(fused_task)
 
             # If the head of the fused task sequence is a source remove it and
@@ -68,47 +58,6 @@ class Fusion(Pass):
             # container task a sink as well
             if fused_task.tail.is_sink:
                 fused_task.is_sink = True
-
-            print("After")
-            for t in graph.get_task(fused_task.id).tasks:
-                print("Task : {}".format(t.name))
-                for e in t.edges:
-                    s = e.source
-                    d = e.dest
-                    print("Edge : source ({}) -> dest ({})".format(
-                        type(s).__name__,
-                        type(d).__name__))
-
-        print("\n\n\n")
-
-        for tid, task in graph.tasks.items():
-            if isinstance(task, FusedTask):
-                print("Fused task : {} ID - {}".format(task.name, task.id))
-                print("**************")
-                for t in task.tasks:
-                    print("Task : {}".format(t.name))
-                    for e in t.edges:
-                        s = e.source
-                        d = e.dest
-                        print("Edge : source ({}) -> dest ({})".format(
-                            type(s).__name__,
-                            type(d).__name__))
-
-        print("")
-
-        for fused_task in fused_tasks:
-            print("Fused task : {} ID - {}".format(fused_task.name,
-                                                   fused_task.id))
-            print("------------")
-            for task in fused_task.tasks:
-                print("Task : {}".format(task.name))
-                for e in task.edges:
-                    s = e.source
-                    d = e.dest
-                    print("Edge : source ({}) -> dest ({})".format(
-                        type(s).__name__,
-                        type(d).__name__))
-        print("")
 
     def post_run(self, graph, ctx):
         pass

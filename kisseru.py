@@ -123,10 +123,15 @@ def app(**configs):
 
 
 class AppRunner(object):
-    def __init__(self, app, config=BackendConfig(BackendType.LOCAL)):
+    def __init__(self,
+                 app,
+                 config=BackendConfig(BackendType.LOCAL_NON_THREADED,
+                                      "Local Non Threaded")):
         self.app = app
+        config = BackendConfig(BackendType.LOCAL, "Local Threaded")
         Backend.set_current_backend(config)
         self.backend = Backend.get_current_backend()
+        print("[KISSERU] Using '{}' backend\n".format(self.backend.name))
 
     def run(self):
         # Get the task graph by running the app specification
