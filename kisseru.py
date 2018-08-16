@@ -1,6 +1,8 @@
 import ast
 import functools
 import logging
+import os
+import platform
 import inspect
 
 from handler import HandlerContext
@@ -125,10 +127,15 @@ def app(**configs):
 class AppRunner(object):
     def __init__(self,
                  app,
-                 config=BackendConfig(BackendType.LOCAL_NON_THREADED,
-                                      "Local Non Threaded")):
+                 config=BackendConfig(BackendType.LOCAL, "Local Threaded")):
         self.app = app
-        config = BackendConfig(BackendType.LOCAL, "Local Threaded")
+
+        # Threaded backend has issues on OS X due to
+        # https://bugs.python.org/issue30385. Fall back to serial backend
+        if platform.system().startswith("Darwin"):
+            config = BackendConfig(BackendType.LOCAL_NON_THREADED,
+                                   "Local Non Threaded")
+
         Backend.set_current_backend(config)
         self.backend = Backend.get_current_backend()
         print("[KISSERU] Using '{}' backend\n".format(self.backend.name))
@@ -174,3 +181,4 @@ class AppRunner(object):
             res = p.post_run(graph, ctx)
 
         self.backend.run_flow(graph)
+        self.backend.cleanup(graph)

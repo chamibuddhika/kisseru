@@ -69,7 +69,6 @@ class LocalThreadedPort(Port):
 
         # Notify the task that it got a new input
         self.notify_task()
-
         # Invoke the receive on task since we are doing one sided push data-flow
         # with local ports
         self.task_ref.receive()
@@ -100,6 +99,9 @@ class LocalNonThreadedBackend(Backend):
         for tid, source in graph.sources.items():
             source.run()
         self.logger.flush()
+
+    def cleanup(self, graph):
+        pass
 
 
 @Backend.register_backend
@@ -156,3 +158,13 @@ class LocalThreadedBackend(Backend):
         while graph.completed_tasks.value != graph.get_num_tasks():
             with graph.done:
                 graph.done.wait()
+
+    def cleanup(self, graph):
+        # Remove temporary files used for transferring data between python
+        # threads (processes)
+        for tid, task in graph.tasks.items():
+            if isinstance(task, FusedTask) or (not task.is_fusee):
+                for param, inport in task.inputs.items():
+                    filename = "{}_{}".format(task.id, param)
+                    if os.path.isfile(filename):
+                        os.remove(filename)

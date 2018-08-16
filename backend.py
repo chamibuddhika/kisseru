@@ -44,6 +44,10 @@ class Backend(metaclass=abc.ABCMeta):
     def run_flow(self, graph):
         pass
 
+    @abc.abstractmethod
+    def cleanup(self, graph):
+        pass
+
     @classmethod
     def register_backend(cls, backend):
         cls.backends[backend.name] = backend
