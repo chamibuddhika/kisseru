@@ -5,6 +5,10 @@ from passes import PassResult
 
 
 class Fusion(Pass):
+    """ Task fusion merges straight line task sequences to run inside one 
+    texecutable unit. 
+    """
+
     def __init__(self, name):
         Pass.__init__(self, name)
         self.description = "Running the task fusion optimizer"

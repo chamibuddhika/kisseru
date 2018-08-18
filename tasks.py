@@ -25,6 +25,29 @@ log = logging.getLogger(__name__)
 
 
 class Port(metaclass=abc.ABCMeta):
+    """ A communication port.
+
+    This class is responsible for getting data in-to and out-of a task. 
+    Each port be an input port or and output port. Each task argument gets an 
+    in-port. If the task output is a tuple each tuple element gets an out-port.
+    Otherwise the task has a single out-port.
+
+    Attributes:
+        type: Type of the value communicated via the port
+        name: Name of the port (parameter name for in-ports, positional index 
+               for out-ports)
+        index: Positional index of the port (argument positional index for 
+               in-ports, tuple positional index for out-ports)
+        task_ref: Task which this port is bound to
+        inport_edge: If the port is an in-port and associated with an edge 
+                      the reference to the associated edge
+        is_inport: True if this is an in-port. False if this an out-port
+        is_one_sided: True if this port is an in-port which  models a one sided
+                       receive
+        is_immediate: True if this port is an in-port which has an immediately
+                       available value. (i.e.: Not an output from another task)
+    """
+
     def __init__(self, typ, name, index, task):
         self.type = typ
         self.name = name
@@ -37,10 +60,38 @@ class Port(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def send(self, value, to_port):
+        """ Sends a value to target port
+
+        Used at out-ports to push a task result value to another task in-port
+        down stream.
+
+        Args:
+            value: Value to be sent
+            to_port: Downstream task in-port
+        """
+
         pass
 
     @abc.abstractmethod
     def receive(self, value=None, from_port=None):
+        """ Receive a value from an upstream task out-port 
+
+        Used at in-ports to accept a task argument from an upstream task 
+        out-port. Value and from_port are optional. If optional then it is 
+        assumed that input is received via other mechanism other than a direct
+        function call (i.e: from filesystem or from network)
+
+        For a local backend receive is called twice, once with the value and
+        another time without the value. Second invocation happens from 
+        task.receive() which calls receive() on all in-ports. This design 
+        maintains symmetry at task.receive() for all types of backends - 
+        backends featuring onesided in-ports or otherwise. 
+
+        Args:
+            value: Value to be received
+            from_port: Upstream task out-port
+        """
+
         pass
 
     def notify_task(self):
@@ -50,6 +101,12 @@ class Port(metaclass=abc.ABCMeta):
             self.task_ref.triggered.notify()
 
     def flip_is_immediate(self):
+        """ Flips the is_immediate state of this in-port
+
+        This method is used in graph optimization passes where immediate inputs
+        may be made non-immediate (e.g: for staging etc.)
+        """
+
         if self.is_immediate:
             self.is_immediate = False
             # Unsynchronized access since we know that this method will be
@@ -69,6 +126,8 @@ class Port(metaclass=abc.ABCMeta):
 
 
 class Sink(Port):
+    """ An out-port which terminates data flow """
+
     def __init__(self, port):
         Port.__init__(self, port.type, port.name, port.index, port.task_ref)
 
@@ -76,6 +135,7 @@ class Sink(Port):
         pass
 
     def receive(self, value, from_port):
+        """ Receives the result and logs it """
         logger = Backend.get_current_backend().logger
         log_str = logger.fmt(
             "[KISSERU] Pipeline output : {}".format(str(value)), LogColor.BLUE)
@@ -86,14 +146,29 @@ class Sink(Port):
 
 
 class Edge(object):
+    """ An edge connects an up-stream task out-port with a down-stream task 
+    in-port 
+    
+    Attributes:
+        source: Upstream task out-port 
+        dest: Downstream task in-port
+        needs_transform: This edge requires a data transformation due to a
+            type mismatch between the source and the dest
+
+    """
+
     def __init__(self, source, dest):
         self.source = source
         self.dest = dest
-        self.send_value = None
         self.needs_transform = False
         self.dest.inport_edge = self
 
     def send(self, value):
+        """ Transfers a value from the source to the dest port
+
+        Args:
+            value: The value to be transferred
+        """
         log.debug("Sending value {} to task {}".format(
             value, self.dest.task_ref.name))
         self.source.send(value, self.dest)
@@ -104,27 +179,82 @@ class Edge(object):
 
 
 class Tasklet(object):
+    """ Tasklet holds info about a single output from a multi-output task 
+    (i.e: a task which returns tuple)
+
+    Tasklet is a temporary data structure which gets generated during task 
+    graph generation. Tasklet holds upstream task output positional information
+    so that the downstream task can wire its in-port to the correct out-port of
+    the upstream task
+
+    Attributes:
+        parent: Task associated with the output
+        out_slot_in_parent: Positional index in the 'parent' task outputs
+    """
+
     def __init__(self, parent, index):
         self.parent = parent
         self.out_slot_in_parent = index
 
 
 class Task(object):
+    """ Task is an unit of execution contained within a workflow.
+
+    A task accepts zero or more inputs and outputs zero or more results. 
+    Multiple results are returned in the form of a python tuple.
+
+    Attributes:
+        name: Task name. Defaults to the function name which corresponds to the
+            task
+        id: Task UUID
+        graph: Task graph which the task is bound to
+        _runner: Executable function associated with the task. This gets 
+            executed at runtime. May include additional code than user provided
+            task logic (i.e: pre and post task handlers) 
+        _fn: User given function for the task (this is a python code object)
+        _sig: Original task (function) signature
+        _args: Task (function) arguments
+
+        _latch: Task trigger latch. Gets triggers once all non immediate inputs
+            have been received 
+        triggered: Task input monitor. Gets notified and task woken up once all
+            non immediate inputs have been received. Used in conjunction with 
+            _latch
+
+        inputs: in-ports of the task. A dictionary with input argument name as
+            key and an in-port object as value
+        outputs: out-ports of the task. A dictionary with output name as key
+            and an out-port object as value
+        edges: Output edges of the task
+
+        is_fusee: True if this task is contained within a FusedTask
+        is_source: True if this task is a source of the associated task graph
+        is_sink: True if this task is a sink of the associated task graph
+        is_staging: True if this task is a staging task generated by the task 
+            graph compiler
+        is_transform: True if this task is a data transformation task generated
+            by the task graph compiler
+    """
+
     def __init__(self, runner, fn, sig, args, kwargs):
+        self.name = fn.__name__
+        self.id = None
+        self.graph = None
         self._runner = runner
         self._fn = fn
         self._sig = sig
         self._args = {}
+
+        # Runtime control
         self._latch = Value('i', 0)
         self.triggered = Condition()
 
+        # I/O
         self.inputs = {}
         self.outputs = {}
         self.edges = []
-        self.name = fn.__name__
-        self.id = None
-        self.graph = None
 
+        # Flags
         self.is_fusee = False
         self.is_source = False
         self.is_sink = False
@@ -312,6 +442,8 @@ class Task(object):
 
 # Notes : ports take care of inter task communication
 class FusedTask(Task):
+    """ A container task for multiple tasks fused together"""
+
     def __init__(self, tasks):
         if tasks == None or len(tasks) == 0:
             raise Exception(
@@ -387,6 +519,26 @@ class FusedTask(Task):
 
 
 class TaskGraph(object):
+    """ TaskGraph is the intermediate representation (IR) of the workflow
+
+    This is the IR which is fed through the graph compiler and then optimized
+    and then code generated against
+
+    Attributes:
+        name: Graph name. Defaults the @app annotated function name
+        tasks: A dictionary of tasks belonging to this graph. Key is task UUID
+        sources: A dictionary of tasks which are sources of graph. Key is task
+            UUID
+        num_tasks: Number of executable units in the graph. A fused task is 
+            considered as one executable unit. So any tasks contained within a
+            fused task is not counted towards num_tasks
+        
+        completed_tasks: Runtime control value for the number of tasks 
+            completed so far in the task graph
+        done: Runtime monitor which will be notified once the graph execution 
+            is completed
+    """
+
     name = None
     tasks = {}
     sources = {}
