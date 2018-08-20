@@ -2,7 +2,7 @@ import multiprocessing
 import pandas as pd
 
 
-# [TODO] Make type checker sophisticated enough to handle generic types at
+# [TODO] Make type checker sophisticated enough to type check parametric types at
 # generic functions like par_map
 @task()
 def par_map(fn: 'a -> b', arr: '[a]',
