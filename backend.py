@@ -61,7 +61,7 @@ class Backend(metaclass=abc.ABCMeta):
         elif backend_type == BackendType.LOCAL:
             backend = cls.backends['LOCAL'](backend_config)
         elif backend_type == BackendType.SLURM:
-            raise Exception("Slurm backend not implemented yet.")
+            backend = cls.backends['SLURM'](backend_config)
         return backend
 
     @classmethod
