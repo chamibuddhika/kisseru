@@ -7,6 +7,7 @@ import logging
 
 from multiprocessing import Value
 from multiprocessing import Condition
+from collections import defaultdict
 
 from logger import LogColor
 from typed import get_type
@@ -256,6 +257,7 @@ class Task(object):
 
         # Flags
         self.is_fusee = False
+        self.is_fused  = False
         self.is_source = False
         self.is_sink = False
         self.is_staging = False
@@ -373,6 +375,7 @@ class Task(object):
             if not inport.is_immediate and inport.inport_edge != None:
                 if inport.inport_edge.source.task_ref == None:
                     raise Exception("Null parent for out-port")
+
                 parents.add(inport.inport_edge.source.task_ref)
         return list(parents)
 
@@ -381,6 +384,7 @@ class Task(object):
             return []
 
         children = set()
+
         for edge in self.edges:
             children.add(edge.dest.task_ref)
         return list(children)
@@ -460,6 +464,7 @@ class FusedTask(Task):
 
         # Default initializing other task flags
         self.is_fusee = False
+        self.is_fused = True
         self.is_source = False
         self.is_sink = False
         self.is_staging = False
@@ -512,6 +517,9 @@ class FusedTask(Task):
         # Also keep a reference to tail task's edges
         self.edges = self.tail.edges
 
+        # Make this task inputs to be that of the head task
+        self.inputs = self.head.inputs
+
     def run(self):
         # Push the inputs that we accepted on behalf of the head task through
         # the head task
@@ -541,6 +549,7 @@ class TaskGraph(object):
 
     name = None
     tasks = {}
+    fusee_map = defaultdict()
     sources = {}
     num_tasks = 0
 
@@ -590,6 +599,30 @@ class TaskGraph(object):
         # tasks.remove(t)
         # return len(tasks)
 
+    def print_fused_graph(self):
+        for tid, task in self.tasks.items():
+            if task.is_fused:
+                print("Task : %s" % task.name)
+                print("Edges :")
+                for edge in task.edges:
+                    print("     Source : %s Destination : %s" % (edge.source.task_ref, edge.dest.task_ref))
+                print("Head : %s" % task.head)
+                print("Tail : %s\n" % task.tail)
+
+    def __str__(self):
+        print("Sources")
+        print("-------")
+        print(", ".join(list(map(lambda x : str(self.sources[x]), self.sources.keys()))))
+
+        print("\n")
+        print("Vertices")
+        print("--------")
+        for tid, task in self.tasks.items():
+            print("task %s" % task)
+            print("parents : %s" % (", ".join(list(map(lambda x: str(x), task.get_parents())))))
+            print("children : %s" % (", ".join(list(map(lambda x: str(x), task.get_children())))))
+            print("\n")
+        return ""
 
 class PreProcess(Pass):
     def __init__(self, name):

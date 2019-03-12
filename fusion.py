@@ -50,6 +50,10 @@ class Fusion(Pass):
         fused_tasks = list(map(lambda fusable: FusedTask(fusable), fusables))
 
         for fused_task in fused_tasks:
+            for fusee in fused_task.tasks:
+                graph.fusee_map[fusee.id] = fused_task
+
+        for fused_task in fused_tasks:
             graph.add_task(fused_task)
 
             # If the head of the fused task sequence is a source remove it and

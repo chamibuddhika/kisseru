@@ -4,6 +4,7 @@ import logging
 import os
 import platform
 import inspect
+import jsonpickle
 
 from handler import HandlerContext
 from handler import HandlerRegistry
@@ -30,6 +31,7 @@ from fusion import Fusion
 from colors import Colors
 from local import LocalNonThreadedBackend
 from local import LocalThreadedBackend
+from slurm import SlurmBackend
 
 xls = 'xls'
 csv = 'csv'
@@ -136,6 +138,8 @@ class AppRunner(object):
             config = BackendConfig(BackendType.LOCAL_NON_THREADED,
                                    "Local Non Threaded")
 
+        config = BackendConfig(BackendType.SLURM, "SLURM")
+
         Backend.set_current_backend(config)
         self.backend = Backend.get_current_backend()
         print("[KISSERU] Using '{}' backend\n".format(self.backend.name))
@@ -180,5 +184,6 @@ class AppRunner(object):
         for p in PassManager.passes:
             res = p.post_run(graph, ctx)
 
-        self.backend.run_flow(graph)
-        self.backend.cleanup(graph)
+        self.backend.package(graph, ".")
+        # self.backend.run_flow(graph)
+        # self.backend.cleanup(graph)

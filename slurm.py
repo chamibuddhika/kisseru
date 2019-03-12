@@ -7,6 +7,7 @@ except:
     import pickle
 import shutil
 
+from collections import defaultdict
 from tasks import Port
 from tasks import FusedTask
 from backend import Backend
@@ -83,6 +84,30 @@ if __name__ == "__main__":
     task.receive()
 
 """
+
+    def _topological_sort(self, graph):
+        white, gray, black = range(3)
+
+        visited = defaultdict(lambda: white)
+        topo_sorted = []
+
+        def _visit(node):
+            visited[node.id] = gray
+            for child in node.get_children():
+                if visited[child.id] == gray:
+                    raise Exception("Not a DAG")
+                elif visited[child.id] == black:
+                    continue
+                else:
+                    _visit(child)
+            visited[node.id] = black
+            topo_sorted.insert(0, node.id)
+
+        for tid, source in graph.sources.items():
+            if visited[tid] == white:
+                _visit(source)
+        return topo_sorted
+
     def _populate_job_map(self, source, visited, job_map, counter):
         if source in visited:
             return (counter, job_map)
@@ -90,13 +115,12 @@ if __name__ == "__main__":
         queue = [source]
         while queue:
             node = queue.pop(0)
-            print("job_map for node : %s" % node.id)
             if node in visited:
                 continue
             visited.add(node)
             job_id = "jid" + str(counter)
             job_name = "--job-name=" + node.name + "_" + str(counter)
-            job_script = "job_" + node.name + "_" + str(node.id)
+            job_script = "job_" + node.name + "_" + str(node.id) + ".sh"
             job_map[node.id] = job_id + "/" + job_name + "/" + job_script
 
             children = node.get_children()
@@ -107,15 +131,12 @@ if __name__ == "__main__":
         return (counter, job_map)
 
 
-    def _get_slurm_jobs(self, source, visited, job_map):
+    def _get_slurm_jobs(self, source, visited, job_map, jobs):
         if source in visited:
             return ""
-
-        jobs = ""
         queue = [source]
         while queue:
             node = queue.pop(0)
-            print("visiting node %s" % node.id)
             if node in visited:
                 continue
 
@@ -126,21 +147,20 @@ if __name__ == "__main__":
             if parents:
                 dependencies = "--dependency=afterany"
                 for parent in parents:
-                    parent_job_id = job_map[parent.id]
-                    dependencies = ":$" + parent_job_id
+                    fused_parent = parent.graph.fusee_map[parent.id]
+                    parent_job = job_map[fused_parent.id]
+                    dependencies += ":$" + parent_job.split("/")[0]
 
             tokens = job_map[node.id].split("/")
             job_id = tokens[0]
             job_name = tokens[1]
             job_script = tokens[2]
-            jobs += job_id + "=" + "$(sbatch " + dependencies + " " + job_name +\
+            jobs[node.id] = job_id + "=" + "$(sbatch " + dependencies + " " + job_name +\
                     " " + job_script + ")\n\n"
 
             children = node.get_children()
             for child in children:
                 queue.append(child)
-        return jobs 
-
 
     def get_port(self, typ, name, index, task):
         return SlurmPort(typ, name, index, task)
@@ -170,16 +190,22 @@ if __name__ == "__main__":
         # create slurm script which submits jobs according to graph dependencies
         visited = set()
         counter = 0
-        job_graph = ""
         job_map = {}
         for tid, source in graph.sources.items():
             (counter, job_map)  = \
                     self._populate_job_map(source, visited, job_map, counter)
 
+        slurm_jobs = {}
         visited.clear()
         for tid, source in graph.sources.items():
-            (counter, slurm_jobs) = self._get_slurm_jobs(source, visited, job_map)
-            job_graph += slurm_jobs 
+            self._get_slurm_jobs(source, visited, job_map, slurm_jobs)
+
+        # Write out jobs in topologically sorted order in the graph
+        job_graph = ""
+        topo_sorted = self._topological_sort(graph)
+
+        for tid in topo_sorted:
+            job_graph += slurm_jobs[tid]
 
         batch_script = ""
         header = "#! /bin/bash\n\n"
@@ -190,7 +216,6 @@ if __name__ == "__main__":
         # serialize the batch srcipt as file in the temporary directory
         with open(os.path.join(temp_dir, "run.sh"), "w") as fp:
             fp.write(batch_script)
-
 
     def deploy(self):
         pass
