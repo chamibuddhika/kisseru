@@ -203,9 +203,17 @@ if __name__ == "__main__":
         # Write out jobs in topologically sorted order in the graph
         job_graph = ""
         topo_sorted = self._topological_sort(graph)
-
         for tid in topo_sorted:
             job_graph += slurm_jobs[tid]
+
+        # Generate job scripts
+        for tid in slurm_jobs:
+            script_body = "module load python3\n"
+            task = graph.get_task(tid)
+            job_script = "job_" + task.name + "_" + str(task.id) + ".sh"
+            with open(os.path.join(temp_dir, job_script), "w") as fp:
+                script_body += ("python3 slurm_driver.py " + str(task.id))
+                fp.write(script_body)
 
         batch_script = ""
         header = "#! /bin/bash\n\n"
