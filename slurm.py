@@ -17,6 +17,8 @@ from logger import ThreadLocalLogger
 from logger import MonoChromeLogger
 from logger import LogColor
 
+import kisseru as self_pkg
+
 log = logging.getLogger(__name__)
 
 class SlurmPort(Port):
@@ -224,6 +226,15 @@ if __name__ == "__main__":
         # serialize the batch srcipt as file in the temporary directory
         with open(os.path.join(temp_dir, "run.sh"), "w") as fp:
             fp.write(batch_script)
+
+        '''
+        pkg_dir = self_pkg.__path__[0]
+        # copy over kisseru implementation files to the deployed artifact 
+        files = os.listdir(pkg_dir)
+        for f in files:
+            if os.path.isfile(os.path.join(pkg_dir, f)):
+                shutil.copy(os.path.join(pkg_dir, f), temp_dir)
+        '''
 
     def deploy(self):
         pass
