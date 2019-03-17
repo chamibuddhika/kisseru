@@ -6,6 +6,7 @@ try:
 except:
     import pickle
 import shutil
+import tarfile
 
 from collections import defaultdict
 from tasks import Port
@@ -167,7 +168,7 @@ if __name__ == "__main__":
     def get_port(self, typ, name, index, task):
         return SlurmPort(typ, name, index, task)
 
-    def package(self, graph, app_dir):
+    def package(self, graph, app_dir, out_file):
         # create temporary directory
         temp_dir = "/tmp/.kisseru_" + graph.name 
         if os.path.exists(temp_dir):
@@ -223,7 +224,7 @@ if __name__ == "__main__":
         batch_script += header
         batch_script += job_graph
 
-        # serialize the batch srcipt as file in the temporary directory
+        # Serialize the batch srcipt as a file in the temporary directory
         with open(os.path.join(temp_dir, "run.sh"), "w") as fp:
             fp.write(batch_script)
 
@@ -235,6 +236,10 @@ if __name__ == "__main__":
             if os.path.isfile(os.path.join(pkg_dir, f)):
                 shutil.copy(os.path.join(pkg_dir, f), temp_dir)
         '''
+
+        # Create the deployable artifact
+        with tarfile.open(out_file, "w:gz") as tar:
+            tar.add(temp_dir, arcname=graph.name)
 
     def deploy(self):
         pass

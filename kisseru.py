@@ -185,6 +185,11 @@ class AppRunner(object):
 
         return graph
 
-        # self.backend.package(graph, ".")
+    def package(self, app_dir, out_file):
+        graph = self.compile()
+        self.backend.package(graph, app_dir, out_file)
+
+    def deploy(self, artifact, url):
+        pass
         # self.backend.run_flow(graph)
         # self.backend.cleanup(graph)
