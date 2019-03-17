@@ -1,4 +1,4 @@
-import env
+# import env
 import time
 import pandas as pd
 
@@ -57,7 +57,6 @@ def cluster_app():
     combined = join(f1, f2)
     plot = run_kmeans(combined, plot)
     return plot
-
 
 if __name__ == "__main__":
     ar = AppRunner(cluster_app)
