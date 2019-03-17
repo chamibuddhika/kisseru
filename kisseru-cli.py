@@ -5,6 +5,16 @@ import importlib
 import click
 from kisseru import AppRunner
 
+def get_backend_config(backend):
+    if backend == "slurm":
+        return BackendConfig(BackendType.SLURM, "Slurm")
+    else if backend == "local":
+        return BackendConfig(BackendType.LOCAL, "Local Threaded")
+    else if backend == "serial":
+        return BackendConfig(BackendType.LOCAL_NON_THREADED, "Serial")
+
+    raise Exception("Unknown backend {}".format(backend))
+
 @click.group()
 def cli():
     pass
@@ -20,17 +30,20 @@ def run(filename):
 def package(backend, filename):
     module_dir, module_file = os.path.split(filename)
 
-    # Change to module directory
+    module_name, ext = os.path.splitext(module_file)
+
+    if ext != ".py":
+        raise Exception("Expected a python file. Got {}".format(module_file))
+
+    # Add module directory to enviornment
     sys.path.append(os.path.join(os.getcwd(), module_dir))
 
-    module = importlib.import_module(module_file)
-    print(module)
+    module = importlib.import_module(module_name)
 
     app = getattr(module, 'cluster_app') 
-    print(app)
 
-    ar = AppRunner(app)
-    ar.run()
+    ar = AppRunner(app, get_backend_config(backend))
+    graph = ar.compile()
     # click.echo(backend)
     # click.echo(filename)
 

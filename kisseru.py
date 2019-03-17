@@ -134,17 +134,16 @@ class AppRunner(object):
 
         # Threaded backend has issues on OS X due to
         # https://bugs.python.org/issue30385. Fall back to serial backend
-        if platform.system().startswith("Darwin"):
+        if platform.system().startswith("Darwin") and \
+                config.backend_type == BackendType.LOCAL:
             config = BackendConfig(BackendType.LOCAL_NON_THREADED,
                                    "Local Non Threaded")
-
-        config = BackendConfig(BackendType.SLURM, "SLURM")
 
         Backend.set_current_backend(config)
         self.backend = Backend.get_current_backend()
         print("[KISSERU] Using '{}' backend\n".format(self.backend.name))
 
-    def run(self):
+    def compile(self):
         # Get the task graph by running the app specification
         graph = self.app()
 
@@ -184,6 +183,8 @@ class AppRunner(object):
         for p in PassManager.passes:
             res = p.post_run(graph, ctx)
 
-        self.backend.package(graph, ".")
+        return graph
+
+        # self.backend.package(graph, ".")
         # self.backend.run_flow(graph)
         # self.backend.cleanup(graph)
