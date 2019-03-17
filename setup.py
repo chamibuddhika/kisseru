@@ -8,7 +8,7 @@ about it."""
 
 setuptools.setup(
     name="kisseru",
-    version="0.2.2",
+    version="0.2",
     author="Buddhika Chamith",
     author_email="chamibuddhika@gmail.com",
     description="A simply scriptable workflow library for data pipelines.",
