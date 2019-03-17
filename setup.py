@@ -7,7 +7,7 @@ You can take the pipeline and run it locally in your machine (or in a cluster or
 about it."""
 
 setuptools.setup(
-    name="kisseru-chamibuddhika",
+    name="kisseru",
     version="0.2.1",
     author="Buddhika Chamith",
     author_email="chamibuddhika@gmail.com",
