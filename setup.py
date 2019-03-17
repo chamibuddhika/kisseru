@@ -7,8 +7,8 @@ You can take the pipeline and run it locally in your machine (or in a cluster or
 about it."""
 
 setuptools.setup(
-    name="kisseru",
-    version="0.1.2",
+    name="kisseru-chamibuddhika",
+    version="0.2.1",
     author="Buddhika Chamith",
     author_email="chamibuddhika@gmail.com",
     description="A simply scriptable workflow library for data pipelines.",
@@ -21,6 +21,8 @@ setuptools.setup(
         'xlwt',
         'xlrd',
         'numpy',
+        'jsonpickle',
+        'click',
     ],
     classifiers=(
         "Programming Language :: Python :: 3",

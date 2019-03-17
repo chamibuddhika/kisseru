@@ -67,8 +67,12 @@ def package(app, backend, out, filename):
     ar.package(app_dir, out)
 
     return out
-    # click.echo(backend)
-    # click.echo(filename)
+
+@cli.command()
+@click.option('--url', "-u", default='', help="Server to be deployed.")
+@click.argument('filename')
+def deploy(url, filename):
+    pass
 
 if __name__ == "__main__":
     cli()
