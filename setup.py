@@ -8,7 +8,7 @@ about it."""
 
 setuptools.setup(
     name="kisseru",
-    version="0.2",
+    version="0.2.3",
     author="Buddhika Chamith",
     author_email="chamibuddhika@gmail.com",
     description="A simply scriptable workflow library for data pipelines.",
@@ -24,6 +24,7 @@ setuptools.setup(
         'jsonpickle',
         'click',
     ],
+    scripts=['kisseru/kisseru-cli'],
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",
