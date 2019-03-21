@@ -51,7 +51,7 @@ def package(app, backend, out, filename):
     out = os.path.abspath(out)
     out = os.path.join(out, module_name + ".tar.gz")
 
-    ar = AppRunner(app, get_backend_config(backend))
+    ar = AppRunner(app, backend)
     ar.package(app_dir, out)
 
     return out
