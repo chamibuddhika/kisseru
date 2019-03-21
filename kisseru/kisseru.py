@@ -129,8 +129,17 @@ def app(**configs):
 class AppRunner(object):
     def __init__(self,
                  app,
-                 config=BackendConfig(BackendType.LOCAL, "Local Threaded")):
+                 backend="local"):
         self.app = app
+
+        if backend == "slurm":
+            config = BackendConfig(BackendType.SLURM, "Slurm")
+        elif backend == "local":
+            config = BackendConfig(BackendType.LOCAL, "Local Threaded")
+        elif backend == "serial":
+            config = BackendConfig(BackendType.LOCAL_NON_THREADED, "Serial")
+        else:
+            raise Exception("Unknown backend {}".format(backend))
 
         # Threaded backend has issues on OS X due to
         # https://bugs.python.org/issue30385. Fall back to serial backend

@@ -5,20 +5,7 @@ import os
 import importlib 
 import click
 
-from backend import BackendType
-from backend import BackendConfig
-from backend import Backend
 from kisseru import AppRunner
-
-def get_backend_config(backend):
-    if backend == "slurm":
-        return BackendConfig(BackendType.SLURM, "Slurm")
-    elif backend == "local":
-        return BackendConfig(BackendType.LOCAL, "Local Threaded")
-    elif backend == "serial":
-        return BackendConfig(BackendType.LOCAL_NON_THREADED, "Serial")
-
-    raise Exception("Unknown backend {}".format(backend))
 
 @click.group()
 def cli():
