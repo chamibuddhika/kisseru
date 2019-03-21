@@ -1,4 +1,8 @@
 
-** version 2.0 **
+** version 0.2.3 **
 
 - Added experimental slurm backend
+
+** version 0.2.4 **
+
+- Added kisseru-cli command line tool as a part of the pip installation.
