@@ -1,4 +1,3 @@
-import jsonpickle
 import logging
 import os
 try:
@@ -64,7 +63,10 @@ class SlurmBackend(Backend):
         self.logger = None
         self.slurm_driver = """
 
-import jsonpickle
+try:
+    import cPickle as pickle
+except:
+    import pickle
 import sys
 
 from kisseru import *
@@ -74,15 +76,10 @@ if __name__ == "__main__":
         raise ValueError("Task ID unavailable")
 
     tid = sys.argv[0]
-    graph_str = None
-    with open("graph", "r") as fp:
-       graph_str = fp.read()
-
-    if not graph_str:
-        raise ValueError("Graph not present")
-
-    graph = jsonpickle.decode(graph_str)
-
+    graph = None
+    with open("graph", 'rb') as fp:
+       graph = pickle.load(fp)
+       
     task = graph.get_task(tid)
     task.receive()
 
@@ -182,9 +179,8 @@ if __name__ == "__main__":
                 shutil.copy(os.path.join(app_dir, f), temp_dir)
 
         # serialize the graph as a file in the temporary directory
-        serialized = jsonpickle.encode(graph)
-        with open(os.path.join(temp_dir, "graph"), "w") as fp:
-            fp.write(serialized)
+        with open(os.path.join(temp_dir, "graph"), "wb") as fp:
+            pickle.dump(graph, fp)
 
         # serialize the slurm driver as file in the temporary directory
         with open(os.path.join(temp_dir, "slurm_driver.py"), "w") as fp:

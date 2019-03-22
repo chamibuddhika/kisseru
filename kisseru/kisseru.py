@@ -4,7 +4,6 @@ import logging
 import os
 import platform
 import inspect
-import jsonpickle
 
 from handler import HandlerContext
 from handler import HandlerRegistry
